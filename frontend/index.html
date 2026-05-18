@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#6f8f7b" />
+    <title>提醒中心登录</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icons/app-icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./viewer.css?v=20260414-phase7-viewer-ui-23" />
+  </head>
+  <body data-page="login">
+    <main class="login-shell">
+      <section class="login-poster">
+        <p class="eyebrow">提醒中心</p>
+        <h1>今天先看该处理的事</h1>
+        <p class="login-copy">打开就先看该发没发和超 60 天没开票，不用翻后台，也不用先看一堆解释。</p>
+      </section>
+
+      <section class="login-panel">
+        <div class="login-panel__head">
+          <p class="eyebrow">员工登录</p>
+          <h2>
+            <span class="login-title-desktop">手机号登录查看</span>
+            <span class="login-title-mobile" aria-label="涵宇智能提醒中心">
+              <span class="login-title-mobile__brand">涵宇智能</span>
+              <span class="login-title-mobile__focus">提醒中心</span>
+            </span>
+          </h2>
+          <p class="muted">输入手机号和密码，直接进今天的提醒。</p>
+        </div>
+
+        <form id="loginForm" class="login-form">
+          <label>
+            手机号
+            <input id="loginPhone" inputmode="numeric" autocomplete="username" placeholder="请输入手机号" />
+          </label>
+          <label>
+            密码
+            <input id="loginPassword" type="password" autocomplete="current-password" placeholder="请输入密码" />
+          </label>
+          <button id="btnLogin" type="submit" class="primary-button primary-button--wide">登录查看</button>
+        </form>
+        <p id="loginError" class="message-line" hidden></p>
+        <button type="button" id="btnInstallApp" class="ghost-button ghost-button--wide" hidden>安装到手机桌面</button>
+      </section>
+    </main>
+
+    <script src="./viewer-app.js?v=20260414-phase7-viewer-ui-23"></script>
+  </body>
+</html>

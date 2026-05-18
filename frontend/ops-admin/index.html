@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>销售履约与开票预警 V1 - 隐藏后台</title>
+    <link rel="stylesheet" href="./styles.css?v=20260412-phase7-ops-admin-3" />
+  </head>
+  <body>
+    <header>
+      <h1>销售履约与开票预警 V1 · 隐藏后台</h1>
+      <p>管理员侧继续保留在这里；员工登录与提醒中心已转到主网址和 <code>/app</code>。</p>
+    </header>
+
+    <main>
+      <section class="card">
+        <h2>连接与角色</h2>
+        <div class="grid two">
+          <label>后端地址
+            <input id="backendBase" placeholder="默认自动跟随当前页面入口；本地 5173 会改连 :8000/v1" />
+          </label>
+          <label>角色
+            <select id="roleSelect">
+              <option value="upload">上传员</option>
+              <option value="admin">管理员</option>
+            </select>
+          </label>
+        </div>
+        <button id="btnCreateJob">创建上传批次</button>
+        <p class="hint">当前批次列表已改为与审计后台同一批次汇总口径，并直接显示文件/记录对账数字；云上默认走同源 /v1，本地 5173 开发态继续自动连 :8000。</p>
+        <div class="grid three">
+          <label>批次视角
+            <select id="jobListBatchView">
+              <option value="all">全部批次</option>
+              <option value="non_empty">仅非空壳批次</option>
+            </select>
+          </label>
+          <label>区域视角
+            <select id="jobListLifecycleView">
+              <option value="current">当前数据</option>
+              <option value="review_queue">待复核区</option>
+              <option value="archived">已归档</option>
+              <option value="special_case">特殊情况区</option>
+              <option value="recycle_bin">回收站</option>
+            </select>
+          </label>
+          <label>业务视角
+            <select id="jobListBusinessView">
+              <option value="all">全部业务</option>
+              <option value="unshipped">未发货</option>
+              <option value="uninvoiced">未开票</option>
+            </select>
+          </label>
+        </div>
+        <button id="btnRefreshJobs">刷新批次汇总</button>
+        <div id="jobListMeta" class="hint"></div>
+        <div id="jobList"></div>
+      </section>
+
+      <section class="card">
+        <h2>员工账号管理</h2>
+        <p class="hint">第一阶段用来维护姚建锋和老板娘的登录账号。只有管理员可创建、改密码、停用账号。</p>
+        <div class="grid four viewer-account-create-grid">
+          <label>显示名称
+            <input id="viewerAccountDisplayName" placeholder="例如：姚建锋" />
+          </label>
+          <label>手机号
+            <input id="viewerAccountPhone" inputmode="numeric" placeholder="例如：13800138001" />
+          </label>
+          <label>角色
+            <select id="viewerAccountRole">
+              <option value="viewer_yao">姚建锋查看账号</option>
+              <option value="viewer_boss">老板娘查看账号</option>
+            </select>
+          </label>
+          <label>初始密码
+            <input id="viewerAccountPassword" type="password" placeholder="至少 6 位" />
+          </label>
+        </div>
+        <div class="viewer-account-toolbar">
+          <button id="btnViewerAccountCreate">新增员工账号</button>
+          <button id="btnViewerAccountsRefresh">刷新账号列表</button>
+        </div>
+        <p id="viewerAccountHint" class="hint">当前还没有读取账号列表。</p>
+        <div id="viewerAccountsList"></div>
+      </section>
+
+      <section class="card">
+        <h2>客户提醒开关</h2>
+        <p class="hint">第二段只给月总管理员用。按“客户 + 提醒类型”关闭后，员工页刷新或重新进入就应立刻不再看到对应数字、列表和排行。</p>
+        <div class="grid three viewer-setting-toolbar">
+          <label>操作人
+            <input id="viewerSettingOperatorName" value="月总" placeholder="例如：月总" />
+          </label>
+          <div class="viewer-setting-toolbar__actions">
+            <button id="btnViewerReminderRefresh">刷新开关列表</button>
+          </div>
+        </div>
+        <p id="viewerReminderHint" class="hint">当前还没有读取客户提醒开关。</p>
+        <div id="viewerReminderSettingsList"></div>
+        <div class="viewer-setting-log-block">
+          <h3>最近操作记录</h3>
+          <div id="viewerReminderLogs"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>客户总览</h2>
+        <p class="hint">这里专门给管理员看“某个客户现在整体什么情况”。先搜客户，再看当前未发货 / 未开票，并可一键跳到下面审计区继续查。</p>
+        <div class="grid three customer-overview-toolbar">
+          <label>客户关键词
+            <input id="customerOverviewKeyword" placeholder="可输客户名关键词；不填就看当前最需要关注的前 20 个客户" />
+          </label>
+          <div class="customer-overview-actions">
+            <button id="btnCustomerOverviewSearch">查客户</button>
+            <button id="btnCustomerOverviewClear">清空</button>
+          </div>
+        </div>
+        <p id="customerOverviewHint" class="hint">当前还没有加载客户总览。</p>
+        <div id="customerOverviewList"></div>
+        <div id="customerOverviewDetail"></div>
+      </section>
+
+      <section class="card">
+        <h2>Job 与文件档案审计后台</h2>
+        <div class="grid three">
+          <label>job_id 关键词
+            <input id="auditFilterJobId" placeholder="可输入部分 job_id" />
+          </label>
+          <label>任务状态
+            <select id="auditFilterTaskStatus">
+              <option value="">全部</option>
+              <option value="queued">排队中</option>
+              <option value="running">处理中</option>
+              <option value="succeeded">成功</option>
+              <option value="failed">失败</option>
+            </select>
+          </label>
+          <label>预警状态
+            <select id="auditFilterAlertStatus">
+              <option value="">全部</option>
+              <option value="open">未解除</option>
+              <option value="resolved">已解除</option>
+            </select>
+          </label>
+          <label>单据类型
+            <select id="auditFilterDocType">
+              <option value="">全部</option>
+              <option value="order">合同订单</option>
+              <option value="shipment">发货单</option>
+              <option value="payment_notice">付款通知单</option>
+              <option value="invoice">发票</option>
+            </select>
+          </label>
+          <label>解析状态
+            <select id="auditFilterParseStatus">
+              <option value="">全部</option>
+              <option value="parsed">已解析</option>
+              <option value="parsing">解析中</option>
+              <option value="failed">失败</option>
+            </select>
+          </label>
+          <label>创建起始日
+            <input id="auditFilterDateFrom" type="date" />
+          </label>
+          <label>创建截止日
+            <input id="auditFilterDateTo" type="date" />
+          </label>
+          <label>批次视角
+            <select id="auditBatchView">
+              <option value="all">全部批次</option>
+              <option value="non_empty">仅非空壳批次</option>
+            </select>
+          </label>
+        </div>
+        <button id="btnAuditRefresh">刷新审计列表</button>
+        <p id="auditRoleHint" class="hint">当前审计角色：上传员（仅管理员可查看审计列表）</p>
+        <div id="auditControlDock"></div>
+        <div class="audit-shell">
+          <div class="audit-pane" id="auditJobsPane">
+            <h3>Job 列表</h3>
+            <div id="auditJobsMeta" class="hint"></div>
+            <div id="auditJobsList"></div>
+          </div>
+          <div class="audit-pane">
+            <h3>Job 文件与关联摘要</h3>
+            <p id="auditSelectedJob" class="hint">未选择 job</p>
+            <div id="auditFilesList"></div>
+            <h3>关联结果摘要</h3>
+            <div id="auditOverview"></div>
+          </div>
+          <div class="audit-pane">
+            <h3>文件详情与预览</h3>
+            <div id="auditFileDetail"></div>
+            <div id="auditPreview"></div>
+            <h3>治理 / 回收站 / 归档动作</h3>
+            <p id="auditRiskNote" class="hint">当前支持：文件/记录进入回收站、恢复、归档、硬删除预览与强确认执行。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>人工上传（四类输入）</h2>
+        <p id="uploadDocTypeHint" class="hint">当前主输入源：金蝶导出 Excel（订单/发货优先）。请选择单据类型后查看推荐格式与允许格式。</p>
+        <div class="grid two">
+          <label>当前 job_id
+            <input id="jobIdInput" placeholder="先创建批次" />
+          </label>
+          <label>单据类型
+            <select id="docType">
+              <option value="" selected disabled>请选择单据类型</option>
+              <option value="order">合同订单</option>
+              <option value="shipment">发货单</option>
+              <option value="payment_notice">付款通知单</option>
+              <option value="invoice">发票</option>
+            </select>
+          </label>
+        </div>
+        <label>可选 metadata_json（用于 PDF/图片 辅助字段）
+          <textarea id="metadataJson" rows="4" placeholder='{"customer":"A客户","contract_no":"HT-001"}'></textarea>
+        </label>
+        <input type="file" id="fileInput" multiple />
+        <button id="btnUpload">上传并归一化</button>
+        <pre id="uploadResult"></pre>
+      </section>
+
+      <section class="card">
+        <h2>龙虾异步任务（对接层）</h2>
+        <p class="hint">业务判断链路固定在 Normalize → Match → Alert，Lobster 仅负责投喂/取结果编排。</p>
+        <button id="btnStartTask">启动 lobster-feed</button>
+        <button id="btnRefreshTasks">刷新任务</button>
+        <div id="taskList"></div>
+      </section>
+
+      <section class="card">
+        <h2>预警结果</h2>
+        <button id="btnRefreshAlerts">刷新预警</button>
+        <button id="btnSummary">客户汇总</button>
+        <button id="btnExportAlerts">导出预警CSV</button>
+        <button id="btnExportSummary">导出汇总CSV</button>
+        <div id="alertsList"></div>
+        <div id="summaryList"></div>
+      </section>
+
+      <section class="card">
+        <h2>运行健康看板</h2>
+        <p class="hint">本区先收运行健康总览；原有批次、审计、任务入口不搬走，这里只汇总关键数字和状态。</p>
+        <button id="btnRefreshOperations">刷新看板</button>
+        <button id="btnRunDatabaseBackup">执行数据库备份</button>
+        <button id="btnRunFileBackup">执行上传文件备份</button>
+        <button id="btnRunLogCleanup">执行日志清理</button>
+        <button id="btnRunRestoreDrill">开始恢复演练</button>
+        <button id="btnArchiveModeAuto">切到自动挡</button>
+        <button id="btnArchiveModeManual">切到手动挡</button>
+        <button id="btnArchivePreview">查看手动归档候选</button>
+        <button id="btnArchiveExecute">执行手动归档</button>
+        <button id="btnOpenArchiveLookup">进入归档查询</button>
+        <div id="operationsSummary"></div>
+        <div class="grid two">
+          <div>
+            <h3>看板阈值 / 备份规则</h3>
+            <textarea id="operationsPolicyConfig" rows="10"></textarea>
+            <button id="btnLoadOperationsPolicy">读取</button>
+            <button id="btnSaveOperationsPolicy">保存（admin）</button>
+          </div>
+          <div>
+            <h3>看板运行记录</h3>
+            <textarea id="operationsRuntimeConfig" rows="10"></textarea>
+            <button id="btnLoadOperationsRuntime">读取</button>
+            <button id="btnSaveOperationsRuntime">保存（admin）</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>轻量 Config Center（首期够用）</h2>
+        <div class="grid two">
+          <div>
+            <h3>规则参数</h3>
+            <textarea id="ruleConfig" rows="8"></textarea>
+            <button id="btnLoadRule">读取</button>
+            <button id="btnSaveRule">保存（admin）</button>
+          </div>
+          <div>
+            <h3>组合键模板</h3>
+            <textarea id="matchConfig" rows="8"></textarea>
+            <button id="btnLoadMatch">读取</button>
+            <button id="btnSaveMatch">保存（admin）</button>
+          </div>
+          <div>
+            <h3>容量 / 归档规则</h3>
+            <textarea id="retentionConfig" rows="8"></textarea>
+            <button id="btnLoadRetention">读取</button>
+            <button id="btnSaveRetention">保存（admin）</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="./app.js?v=20260412-phase7-ops-admin-3"></script>
+  </body>
+</html>

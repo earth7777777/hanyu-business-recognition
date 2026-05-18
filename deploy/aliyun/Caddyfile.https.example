@@ -1,0 +1,25 @@
+example.com {
+    encode zstd gzip
+
+    redir /ops-admin /ops-admin/
+
+    handle /v1/* {
+        reverse_proxy 127.0.0.1:8000
+    }
+
+    handle /health {
+        reverse_proxy 127.0.0.1:8000
+    }
+
+    handle_path /ops-admin/* {
+        root * /srv/hanyu-app/current/frontend/ops-admin
+        try_files {path} {path}/ /index.html
+        file_server
+    }
+
+    handle {
+        root * /srv/hanyu-app/current/frontend
+        try_files {path} {path}/ /index.html
+        file_server
+    }
+}

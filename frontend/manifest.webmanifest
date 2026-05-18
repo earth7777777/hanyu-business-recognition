@@ -1,0 +1,17 @@
+{
+  "name": "涵宇提醒中心",
+  "short_name": "提醒中心",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f3efe6",
+  "theme_color": "#132033",
+  "description": "姚建锋 / 老板娘第一阶段员工提醒入口",
+  "icons": [
+    {
+      "src": "/icons/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

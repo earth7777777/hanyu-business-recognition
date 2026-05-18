@@ -1,0 +1,1 @@
+"""External orchestration adapter layer."""

@@ -1,0 +1,19 @@
+[Unit]
+Description=Hanyu Business Recognition Backend
+Wants=network-online.target
+After=network-online.target mariadb.service
+
+[Service]
+Type=simple
+User=ecs-user
+Group=ecs-user
+WorkingDirectory=/srv/hanyu-app/current/backend
+EnvironmentFile=/srv/hanyu-app/current/backend/.env
+ExecStart=/srv/hanyu-app/current/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+StandardOutput=append:/srv/hanyu-app/shared/logs/backend-stdout.log
+StandardError=append:/srv/hanyu-app/shared/logs/backend-stderr.log
+
+[Install]
+WantedBy=multi-user.target

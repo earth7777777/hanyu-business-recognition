@@ -1,0 +1,48 @@
+# Mac 自动生成
+.DS_Store
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Python 本机环境
+.venv/
+venv/
+backend/.venv/
+
+# 本地配置和密码
+.env
+backend/.env
+
+# 本地数据、运行文件、日志和备份
+backend/data/
+backend/storage/
+ops-backups/
+*.log
+*.swp
+
+# 数据库备份和本地数据库文件
+*.sql
+*.sql.gz
+*.sha256
+*.db
+*.sqlite
+*.sqlite3
+
+# 密钥和证书
+*.pem
+*.key
+*.crt
+
+# 月总驾驶舱文件，不推 GitHub
+AGENTS.md
+月总使用速查表.md
+docs/
+plans/
+.agents/
+
+# 本地迁移交接资料，默认不推
+MIGRATION_HANDOFF.md

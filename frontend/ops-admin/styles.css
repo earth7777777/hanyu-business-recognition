@@ -1,0 +1,660 @@
+:root {
+  --bg: #f4f6f8;
+  --card: #ffffff;
+  --text: #1e2a32;
+  --muted: #5f7282;
+  --accent: #0e7490;
+  --border: #d7e0e7;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: radial-gradient(circle at top, #e8f4fb 0%, var(--bg) 45%);
+  color: var(--text);
+}
+
+header {
+  padding: 24px;
+  background: linear-gradient(135deg, #0e7490, #155e75);
+  color: #fff;
+}
+
+header h1 { margin: 0 0 4px; }
+header p { margin: 0; opacity: 0.85; }
+
+main {
+  max-width: 1480px;
+  margin: 20px auto 40px;
+  padding: 0 10px;
+  display: grid;
+  gap: 16px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 10px 25px rgba(13, 38, 59, 0.06);
+}
+
+h2 { margin: 0 0 12px; }
+h3 { margin: 8px 0; }
+
+.grid {
+  display: grid;
+  gap: 12px;
+}
+.grid.two {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+.grid.three {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+.grid.four {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+
+input, select, textarea, button {
+  font: inherit;
+}
+
+input, select, textarea {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  background: #fff;
+}
+
+button {
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  padding: 8px 12px;
+  cursor: pointer;
+  margin-right: 8px;
+  margin-top: 8px;
+}
+
+button:hover {
+  filter: brightness(1.08);
+}
+
+button[data-action="reset-password"] {
+  background: #c2410c;
+}
+
+pre {
+  background: #0c1b24;
+  color: #d9f0ff;
+  border-radius: 8px;
+  padding: 12px;
+  overflow-x: auto;
+}
+
+.hint {
+  color: var(--muted);
+  margin-top: 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+td, th {
+  border: 1px solid var(--border);
+  padding: 6px;
+  text-align: left;
+}
+
+.viewer-account-create-grid {
+  margin-bottom: 10px;
+}
+
+.viewer-account-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.viewer-account-table-wrap {
+  overflow-x: auto;
+}
+
+.viewer-account-table {
+  min-width: 920px;
+}
+
+.viewer-account-table input,
+.viewer-account-table select {
+  width: 100%;
+  min-width: 120px;
+}
+
+.viewer-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.viewer-account-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.viewer-account-last-login {
+  min-width: 140px;
+}
+
+.viewer-account-empty {
+  padding: 12px 0 4px;
+}
+
+.viewer-setting-toolbar {
+  align-items: end;
+  margin-bottom: 10px;
+}
+
+.viewer-setting-toolbar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.viewer-setting-table-wrap,
+.viewer-setting-log-wrap {
+  overflow-x: auto;
+}
+
+.viewer-setting-table,
+.viewer-setting-log-table {
+  min-width: 1180px;
+}
+
+.viewer-setting-table td,
+.viewer-setting-table th,
+.viewer-setting-log-table td,
+.viewer-setting-log-table th {
+  vertical-align: top;
+}
+
+.viewer-setting-table input,
+.viewer-setting-table select {
+  width: 100%;
+  min-width: 120px;
+}
+
+.viewer-setting-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.viewer-setting-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.viewer-setting-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eef5f2;
+  color: #305045;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.viewer-setting-badge.is-warn {
+  background: #fff3ea;
+  color: #a55717;
+}
+
+.viewer-setting-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.viewer-setting-log-block {
+  margin-top: 16px;
+}
+
+.viewer-setting-empty {
+  padding: 12px 0 4px;
+}
+
+.customer-overview-toolbar {
+  align-items: end;
+  margin-bottom: 10px;
+}
+
+.customer-overview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.customer-overview-table-wrap,
+.customer-overview-detail-table-wrap {
+  overflow-x: auto;
+}
+
+.customer-overview-table,
+.customer-overview-detail-table {
+  min-width: 1080px;
+}
+
+.customer-overview-empty {
+  padding: 12px 0 4px;
+}
+
+.customer-overview-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin: 12px 0 16px;
+}
+
+.customer-overview-summary-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  background: #fbfdff;
+}
+
+.customer-overview-summary-card .label {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.customer-overview-summary-card .value {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.customer-overview-detail-block + .customer-overview-detail-block {
+  margin-top: 16px;
+}
+
+.customer-overview-table td,
+.customer-overview-table th,
+.customer-overview-detail-table td,
+.customer-overview-detail-table th {
+  vertical-align: top;
+}
+
+.customer-overview-table tr.is-selected {
+  background: #eef8fc;
+}
+
+#operationsSummary {
+  margin-top: 12px;
+}
+
+#operationsSummary .operations-board {
+  display: grid;
+  gap: 16px;
+}
+
+#operationsSummary .operations-board-top,
+#operationsSummary .operations-board-detail {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+
+#operationsSummary .operations-board-top {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+#operationsSummary .operations-board-detail {
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+}
+
+#operationsSummary .operations-panel {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fbfdff;
+  padding: 12px;
+  overflow: hidden;
+}
+
+#operationsSummary .operations-panel h3 {
+  margin: 0 0 10px;
+}
+
+#operationsSummary .operations-panel h4 {
+  margin: 12px 0 8px;
+}
+
+#operationsSummary .operations-panel-full {
+  grid-column: 1 / -1;
+}
+
+#operationsSummary .operations-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+#operationsSummary .operations-table-scroll-compact {
+  overflow-x: auto;
+}
+
+#operationsSummary .operations-kv-table {
+  width: 100%;
+  min-width: 100%;
+  table-layout: fixed;
+}
+
+#operationsSummary .operations-kv-table th,
+#operationsSummary .operations-kv-table td,
+#operationsSummary .operations-detail-table th,
+#operationsSummary .operations-detail-table td {
+  vertical-align: top;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+#operationsSummary .operations-kv-table th {
+  width: 180px !important;
+}
+
+#operationsSummary .operations-detail-table {
+  width: max-content;
+  min-width: 100%;
+}
+
+#operationsSummary .operations-slow-request-table {
+  min-width: 820px;
+}
+
+#operationsSummary .operations-archive-preview-table {
+  min-width: 980px;
+}
+
+#operationsSummary .operations-alerts {
+  display: grid;
+  gap: 10px;
+}
+
+#operationsSummary .operations-alerts > div {
+  min-width: 0;
+}
+
+#operationsSummary .operations-alerts p {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+#alertsList {
+  margin-top: 10px;
+  overflow-x: auto;
+}
+
+#alertsList table.alerts-table {
+  table-layout: fixed;
+  min-width: 1200px;
+}
+
+#alertsList table.alerts-table th,
+#alertsList table.alerts-table td {
+  white-space: nowrap;
+  vertical-align: top;
+}
+
+#alertsList th.alert-col-id,
+#alertsList td.alert-col-id {
+  width: 180px;
+  max-width: 180px;
+}
+
+#alertsList th.alert-col-job_id,
+#alertsList td.alert-col-job_id {
+  width: 170px;
+  max-width: 170px;
+}
+
+#alertsList th.alert-col-group_id,
+#alertsList td.alert-col-group_id {
+  width: 170px;
+  max-width: 170px;
+}
+
+#alertsList th.alert-col-alert_type,
+#alertsList td.alert-col-alert_type {
+  width: 140px;
+  max-width: 140px;
+}
+
+#alertsList th.alert-col-severity,
+#alertsList td.alert-col-severity,
+#alertsList th.alert-col-status,
+#alertsList td.alert-col-status {
+  width: 90px;
+  max-width: 90px;
+}
+
+#alertsList th.alert-col-created_at,
+#alertsList td.alert-col-created_at {
+  width: 160px;
+  max-width: 160px;
+}
+
+#alertsList td.alert-col-id,
+#alertsList td.alert-col-job_id,
+#alertsList td.alert-col-group_id,
+#alertsList td.alert-col-alert_type,
+#alertsList td.alert-col-severity,
+#alertsList td.alert-col-status,
+#alertsList td.alert-col-created_at {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#alertsList .alert-message-col,
+#alertsList .alert-message-cell {
+  width: 34%;
+  min-width: 360px;
+  white-space: normal !important;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
+#alertsList .alert-payload-col,
+#alertsList .alert-payload-cell {
+  width: 26%;
+  min-width: 280px;
+  white-space: normal !important;
+}
+
+#alertsList .alert-payload-cell details {
+  width: 100%;
+}
+
+#alertsList .alert-payload-cell summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+#alertsList .alert-payload-cell pre {
+  margin: 6px 0 0;
+  max-height: 220px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+}
+
+#jobList {
+  margin-top: 12px;
+  height: 320px;
+  overflow-y: auto;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fbfdff;
+}
+
+.audit-shell {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  grid-template-areas:
+    "pane-a pane-a"
+    "pane-b pane-c";
+  gap: 12px;
+  align-items: stretch;
+}
+
+.audit-shell > .audit-pane:nth-child(1) {
+  grid-area: pane-a;
+}
+
+.audit-shell > .audit-pane:nth-child(2) {
+  grid-area: pane-b;
+}
+
+.audit-shell > .audit-pane:nth-child(3) {
+  grid-area: pane-c;
+}
+
+.audit-pane {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fbfdff;
+  padding: 10px;
+  min-height: 420px;
+  max-height: 72vh;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
+.audit-pane h3 {
+  margin-top: 4px;
+}
+
+#auditJobsPane {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+#auditJobsMeta {
+  flex: 0 0 auto;
+  margin-bottom: 8px;
+}
+
+#auditJobsList {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
+/* Keep default table auto layout to protect readability in left job grid. */
+#auditJobsList table {
+  table-layout: auto;
+  width: max-content;
+  min-width: 100%;
+}
+
+/* Column readability priority (left job table). */
+#auditJobsList th:nth-child(1),
+#auditJobsList td:nth-child(1) {
+  min-width: 220px;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+#auditJobsList th:nth-child(2),
+#auditJobsList td:nth-child(2),
+#auditJobsList th:nth-child(5),
+#auditJobsList td:nth-child(5) {
+  min-width: 130px;
+  white-space: nowrap;
+}
+
+#auditJobsList th:nth-child(4),
+#auditJobsList td:nth-child(4) {
+  min-width: 200px;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+#auditJobsList th:nth-child(6),
+#auditJobsList td:nth-child(6) {
+  min-width: 100px;
+  white-space: nowrap;
+}
+
+#auditJobsList th:nth-child(3),
+#auditJobsList td:nth-child(3),
+#auditJobsList th:nth-child(7),
+#auditJobsList td:nth-child(7),
+#auditJobsList th:nth-child(8),
+#auditJobsList td:nth-child(8),
+#auditJobsList th:nth-child(9),
+#auditJobsList td:nth-child(9) {
+  min-width: 64px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Job id button should wrap on natural breakpoints, not character-by-character. */
+#auditJobsList td:nth-child(1) button {
+  display: inline-block;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+
+@media (max-width: 1100px) {
+  .audit-shell {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "pane-a"
+      "pane-b"
+      "pane-c";
+  }
+  .audit-pane {
+    min-height: 320px;
+    max-height: none;
+  }
+
+  #operationsSummary .operations-board-detail {
+    grid-template-columns: 1fr;
+  }
+
+  #operationsSummary .operations-panel-full {
+    grid-column: auto;
+  }
+}
