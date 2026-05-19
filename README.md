@@ -24,7 +24,7 @@
 
 ```sql
 CREATE DATABASE sales_warning_v1 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'hanyu_app'@'%' IDENTIFIED BY 'CHANGE_ME_PASSWORD';
+CREATE USER 'hanyu_app'@'%' IDENTIFIED BY 'StrongPassword';
 GRANT ALL PRIVILEGES ON sales_warning_v1.* TO 'hanyu_app'@'%';
 FLUSH PRIVILEGES;
 ```
@@ -36,13 +36,13 @@ cd backend
 python3 -m pip install --break-system-packages -r requirements.txt
 
 # 推荐：单一连接串
-export DATABASE_URL='mysql+pymysql://hanyu_app:CHANGE_ME_PASSWORD@127.0.0.1:3306/sales_warning_v1?charset=utf8mb4'
+export DATABASE_URL='mysql+pymysql://hanyu_app:StrongPassword@127.0.0.1:3306/sales_warning_v1?charset=utf8mb4'
 
 # 或分项变量（DATABASE_URL 为空时生效）
 # export DB_HOST=127.0.0.1
 # export DB_PORT=3306
 # export DB_USER=hanyu_app
-# export DB_PASSWORD=CHANGE_ME_PASSWORD
+# export DB_PASSWORD=StrongPassword
 # export DB_NAME=sales_warning_v1
 
 python3 -m uvicorn app.main:app --reload --port 8000

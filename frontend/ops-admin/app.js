@@ -281,6 +281,8 @@ const FIELD_LABELS = {
   quantity: "数量",
   due_date: "预计交货日期",
   latest_outbound_date: "最近出库日期",
+  order_outbound_status: "整单出库状态",
+  line_outbound_status: "本产品出库状态",
   executed_shipped_qty: "行已执行已出库数量",
   invoiced_qty: "行已开票数量",
   uninvoiced_qty: "行未开票数量",
@@ -309,6 +311,11 @@ const FILTER_KEY_LABELS = {
   date_from: "创建起始日",
   date_to: "创建截止日",
   batch_view: "批次视角",
+};
+const OUTBOUND_STATUS_LABELS = {
+  fully_outbound: "已全部出库",
+  partially_outbound: "部分出库",
+  not_outbound: "未出库",
 };
 const JOB_STATUS_ORDER = [
   "failed",
@@ -1899,6 +1906,8 @@ function renderAuditRecordTable(items) {
         <td>${lifecycleStateLabel(it.lifecycle_state ?? "")}</td>
         <td>${identityModeLabel(it.identity_mode ?? "")}</td>
         <td>${it.item_code ?? ""}</td>
+        <td>${outboundStatusLabel(it.order_outbound_status)}</td>
+        <td>${outboundStatusLabel(it.line_outbound_status)}</td>
         <td>${it.executed_shipped_qty ?? ""}</td>
         <td>${it.order_unshipped_qty ?? ""}</td>
         <td>${it.invoiced_qty ?? ""}</td>
@@ -1926,6 +1935,8 @@ function renderAuditRecordTable(items) {
         <th>生命周期</th>
         <th>身份模式</th>
         <th>商品编码</th>
+        <th>整单出库</th>
+        <th>本产品出库</th>
         <th>已出库</th>
         <th>未发货</th>
         <th>已开票</th>
@@ -2215,6 +2226,11 @@ function filterValueLabel(key, value) {
   return formatDisplayValue(normalized, value);
 }
 
+function outboundStatusLabel(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return OUTBOUND_STATUS_LABELS[normalized] || value || "";
+}
+
 function isIdentifierField(key) {
   const normalized = String(key || "").trim().toLowerCase();
   return normalized === "id" || normalized.endsWith("_id");
@@ -2251,6 +2267,9 @@ function formatDisplayValue(key, value) {
   }
   if (normalized === "identity_mode") {
     return identityModeLabel(value);
+  }
+  if (normalized === "order_outbound_status" || normalized === "line_outbound_status") {
+    return outboundStatusLabel(value);
   }
   if (normalized === "delete_origin") {
     return deleteOriginLabel(value);
@@ -2624,6 +2643,8 @@ async function previewAuditNormalizedRecords(fileId = state.audit.selectedFileId
     item_name: it.item_name ?? "",
     item_code: it.item_code ?? "",
     quantity: it.quantity ?? "",
+    order_outbound_status: it.order_outbound_status ?? "",
+    line_outbound_status: it.line_outbound_status ?? "",
     executed_shipped_qty: it.executed_shipped_qty ?? "",
     order_unshipped_qty: it.order_unshipped_qty ?? "",
     invoiced_qty: it.invoiced_qty ?? "",

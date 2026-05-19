@@ -127,6 +127,42 @@ def test_order_excel_with_close_columns_normalizes_and_keeps_raw():
     assert ext.get("line_closed_column_present") is True
 
 
+def test_order_excel_outbound_status_columns_normalize_and_keep_raw():
+    headers = {"X-Role": "admin"}
+    job_id = _create_job(headers)
+    suffix = uuid4().hex[:8]
+    order_no_1 = f"DOC-OUT-1-{suffix}"
+    order_no_2 = f"DOC-OUT-2-{suffix}"
+
+    csv_content = (
+        "客户,合同号,单据编号,分录行号,料号,品名,数量,金额,订单日期,预计交货日期,出库状态,行出库状态,最近出库日期,"
+        "行已执行已出库数量,行已开票数量,行未开票数量,行开票状态\n"
+        f"A客户,HT-OUT-1,{order_no_1},1,ITEM-OUT-1,产品出库1,100,1000,2026-03-10,2026-03-20,全部出库,全部出库,"
+        "2026-03-15,100,50,50,部分开票\n"
+        f"A客户,HT-OUT-2,{order_no_2},2,ITEM-OUT-2,产品出库2,80,800,2026-03-11,2026-03-21,部分出库,未出库,"
+        "2026-03-16,20,0,20,未开票\n"
+    )
+    file_id = _upload_order_csv(job_id, csv_content, headers)
+
+    payload1 = _payload_by_source_row(file_id, 1)
+    core1 = payload1.get("core") or {}
+    ext1 = payload1.get("ext") or {}
+    assert core1.get("order_outbound_status") == "fully_outbound"
+    assert core1.get("line_outbound_status") == "fully_outbound"
+    assert ext1.get("order_outbound_status_raw") == "全部出库"
+    assert ext1.get("line_outbound_status_raw") == "全部出库"
+    assert ext1.get("order_outbound_status_column_present") is True
+    assert ext1.get("line_outbound_status_column_present") is True
+
+    payload2 = _payload_by_source_row(file_id, 2)
+    core2 = payload2.get("core") or {}
+    ext2 = payload2.get("ext") or {}
+    assert core2.get("order_outbound_status") == "partially_outbound"
+    assert core2.get("line_outbound_status") == "not_outbound"
+    assert ext2.get("order_outbound_status_raw") == "部分出库"
+    assert ext2.get("line_outbound_status_raw") == "未出库"
+
+
 def test_order_excel_entry_line_no_normalizes_and_keeps_raw():
     headers = {"X-Role": "admin"}
     job_id = _create_job(headers)
@@ -179,6 +215,28 @@ def test_init_db_backfills_order_amount_aliases_for_existing_field_mappings():
         aliases = order_map.get("amount") or []
         assert "价税合计" in aliases
         assert "成交金额" in aliases
+
+
+def test_init_db_backfills_order_outbound_status_aliases_for_existing_field_mappings():
+    with SessionLocal() as db:
+        item = db.get(ConfigEntry, "field_mappings")
+        assert item is not None
+        current = dict(item.value_json or {})
+        order_map = dict(current.get("order") or {})
+        order_map.pop("order_outbound_status", None)
+        order_map.pop("line_outbound_status", None)
+        current["order"] = order_map
+        item.value_json = current
+        db.commit()
+
+    init_db()
+
+    with SessionLocal() as db:
+        item = db.get(ConfigEntry, "field_mappings")
+        assert item is not None
+        order_map = dict((item.value_json or {}).get("order") or {})
+        assert "出库状态" in (order_map.get("order_outbound_status") or [])
+        assert "行出库状态" in (order_map.get("line_outbound_status") or [])
 
 
 def test_order_excel_duplicate_import_auto_deletes_new_strict_duplicate_and_keeps_single_current():
@@ -498,8 +556,12 @@ def test_order_excel_missing_close_columns_marks_null_and_unknown():
     assert core.get("due_date") == "2026-03-21"
     assert core.get("order_closed") is None
     assert core.get("line_closed") is None
+    assert core.get("order_outbound_status") is None
+    assert core.get("line_outbound_status") is None
     assert ext.get("order_closed_column_present") is False
     assert ext.get("line_closed_column_present") is False
+    assert ext.get("order_outbound_status_column_present") is False
+    assert ext.get("line_outbound_status_column_present") is False
 
 
 def test_order_excel_with_garbage_columns_is_ignored_safely():

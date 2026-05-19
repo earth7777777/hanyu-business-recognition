@@ -380,6 +380,8 @@ def _normalized_record_item(record: NormalizedRecord) -> dict[str, Any]:
         "uninvoiced_qty": core.get("uninvoiced_qty"),
         "due_date": core.get("due_date"),
         "latest_outbound_date": core.get("latest_outbound_date"),
+        "order_outbound_status": core.get("order_outbound_status"),
+        "line_outbound_status": core.get("line_outbound_status"),
         "change_type": governance.get("change_type"),
         "identity_mode": governance.get("identity_mode"),
         "lifecycle_state": record_lifecycle_state(record),

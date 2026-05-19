@@ -275,6 +275,35 @@ def test_admin_records_view_includes_entry_line_no():
     assert payload["items"][0]["is_current_effective"] is True
 
 
+def test_admin_records_view_includes_outbound_statuses():
+    headers = {"X-Role": "admin"}
+    order_no = f"DOC-921-{uuid4().hex[:8]}"
+
+    create_job = client.post("/v1/upload-jobs", headers=headers)
+    assert create_job.status_code == 200
+    job_id = create_job.json()["id"]
+
+    csv_content = (
+        "客户,合同号,单据编号,分录行号,料号,品名,数量,金额,订单日期,预计交货日期,出库状态,行出库状态,最近出库日期,行已执行已出库数量,行已开票数量,行未开票数量\n"
+        f"A客户,HT-921,{order_no},1,ITEM-921,产品921,100,1000,2026-03-18,2026-03-20,部分出库,全部出库,2026-03-21,100,40,60\n"
+    )
+    upload = client.post(
+        f"/v1/upload-jobs/{job_id}/files",
+        headers=headers,
+        data={"document_type": "order"},
+        files={"upload": ("order-outbound-status.csv", io.BytesIO(csv_content.encode("utf-8")), "text/csv")},
+    )
+    assert upload.status_code == 200
+    file_id = upload.json()["id"]
+
+    records = client.get(f"/v1/admin/files/{file_id}/records", headers=headers)
+    assert records.status_code == 200
+    payload = records.json()
+    assert payload["count"] == 1
+    assert payload["items"][0]["order_outbound_status"] == "partially_outbound"
+    assert payload["items"][0]["line_outbound_status"] == "fully_outbound"
+
+
 def test_upload_job_summary_matches_admin_job_summary_counts():
     headers = {"X-Role": "admin"}
     active_job_id = _create_job(headers)

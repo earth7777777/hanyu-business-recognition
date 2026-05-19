@@ -23,6 +23,8 @@ _ORDER_SIGNAL_FIELDS = (
     "quantity",
     "amount",
     "latest_outbound_date",
+    "order_outbound_status",
+    "line_outbound_status",
     "executed_shipped_qty",
     "invoiced_qty",
     "uninvoiced_qty",
@@ -126,6 +128,37 @@ def _to_line_invoice_status(value: Any) -> str | None:
         "未开发票",
     }:
         return "uninvoiced"
+    return None
+
+
+def _to_outbound_status(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    if text in {
+        "fully_outbound",
+        "full",
+        "全部出库",
+        "已全部出库",
+        "完全出库",
+        "全部发货",
+    }:
+        return "fully_outbound"
+    if text in {
+        "partially_outbound",
+        "partial",
+        "部分出库",
+        "部分发货",
+    }:
+        return "partially_outbound"
+    if text in {
+        "not_outbound",
+        "none",
+        "未出库",
+        "未发货",
+        "没有出库",
+    }:
+        return "not_outbound"
     return None
 
 
@@ -278,6 +311,8 @@ def normalize_record(
         has_order_closed = _column_present(source_columns, "order_closed")
         has_line_closed = _column_present(source_columns, "line_closed")
         has_latest_outbound_date = _column_present(source_columns, "latest_outbound_date")
+        has_order_outbound_status = _column_present(source_columns, "order_outbound_status")
+        has_line_outbound_status = _column_present(source_columns, "line_outbound_status")
         has_executed_shipped_qty = _column_present(source_columns, "executed_shipped_qty")
         has_invoiced_qty = _column_present(source_columns, "invoiced_qty")
         has_uninvoiced_qty = _column_present(source_columns, "uninvoiced_qty")
@@ -288,6 +323,12 @@ def normalize_record(
         core["line_closed"] = _to_closed_bool(parsed_row.get("line_closed")) if has_line_closed else None
         core["latest_outbound_date"] = (
             _to_date_str(parsed_row.get("latest_outbound_date")) if has_latest_outbound_date else None
+        )
+        core["order_outbound_status"] = (
+            _to_outbound_status(parsed_row.get("order_outbound_status")) if has_order_outbound_status else None
+        )
+        core["line_outbound_status"] = (
+            _to_outbound_status(parsed_row.get("line_outbound_status")) if has_line_outbound_status else None
         )
         core["executed_shipped_qty"] = _order_qty_zero_if_empty(
             parsed_row.get("executed_shipped_qty"), has_executed_shipped_qty
@@ -319,6 +360,8 @@ def normalize_record(
         ext["order_closed_raw"] = parsed_row.get("order_closed")
         ext["line_closed_raw"] = parsed_row.get("line_closed")
         ext["latest_outbound_date_raw"] = parsed_row.get("latest_outbound_date")
+        ext["order_outbound_status_raw"] = parsed_row.get("order_outbound_status")
+        ext["line_outbound_status_raw"] = parsed_row.get("line_outbound_status")
         ext["executed_shipped_qty_raw"] = parsed_row.get("executed_shipped_qty")
         ext["invoiced_qty_raw"] = parsed_row.get("invoiced_qty")
         ext["uninvoiced_qty_raw"] = parsed_row.get("uninvoiced_qty")
@@ -328,6 +371,8 @@ def normalize_record(
         ext["entry_line_no_raw"] = parsed_row.get("entry_line_no")
         ext["order_closed_column_present"] = _column_present(source_columns, "order_closed")
         ext["line_closed_column_present"] = _column_present(source_columns, "line_closed")
+        ext["order_outbound_status_column_present"] = _column_present(source_columns, "order_outbound_status")
+        ext["line_outbound_status_column_present"] = _column_present(source_columns, "line_outbound_status")
         ext["review_required_columns_present"] = {
             field: _column_present(source_columns, field) for field in _ORDER_REVIEW_REQUIRED_FIELDS
         }
