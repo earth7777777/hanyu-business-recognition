@@ -62,12 +62,12 @@ def _create_viewer_mix_job(suffix: str) -> str:
     outbound_85 = (date.today() - timedelta(days=85)).isoformat()
     outbound_65 = (date.today() - timedelta(days=65)).isoformat()
     csv_content = (
-        "客户,客户订单号,分录行号,料号,品名,数量,金额,订单日期,交期,最近出库日期,行已执行已出库数量,行已开票数量,行未开票数量\n"
-        f"A客户{suffix},SO-VIEW-{suffix}-INV-A1,1,ITEM-A1,产品A1,100,52000,2026-01-05,2026-01-20,{outbound_95},100,0,100\n"
-        f"A客户{suffix},SO-VIEW-{suffix}-INV-A2,2,ITEM-A2,产品A2,50,,2026-01-06,2026-01-20,{outbound_65},50,10,40\n"
-        f"B客户{suffix},SO-VIEW-{suffix}-INV-B1,1,ITEM-B1,产品B1,80,18000,2026-01-07,2026-01-20,{outbound_85},80,0,80\n"
-        f"C客户{suffix},SO-VIEW-{suffix}-INV-C1,1,ITEM-C1,产品C1,20,9000,2026-01-08,2026-01-20,{outbound_65},20,0,20\n"
-        f"A客户{suffix},SO-VIEW-{suffix}-DUE-A3,3,ITEM-D1,产品D1,30,3000,2026-04-01,{due},,0,0,0\n"
+        "客户,客户订单号,分录行号,料号,品名,数量,金额,订单日期,交期,出库状态,行出库状态,最近出库日期,行已执行已出库数量,行已开票数量,行未开票数量\n"
+        f"A客户{suffix},SO-VIEW-{suffix}-INV-A1,1,ITEM-A1,产品A1,100,52000,2026-01-05,2026-01-20,部分出库,全部出库,{outbound_95},100,0,100\n"
+        f"A客户{suffix},SO-VIEW-{suffix}-INV-A2,2,ITEM-A2,产品A2,50,,2026-01-06,2026-01-20,部分出库,全部出库,{outbound_65},50,10,40\n"
+        f"B客户{suffix},SO-VIEW-{suffix}-INV-B1,1,ITEM-B1,产品B1,80,18000,2026-01-07,2026-01-20,全部出库,全部出库,{outbound_85},80,0,80\n"
+        f"C客户{suffix},SO-VIEW-{suffix}-INV-C1,1,ITEM-C1,产品C1,20,9000,2026-01-08,2026-01-20,全部出库,全部出库,{outbound_65},20,0,20\n"
+        f"A客户{suffix},SO-VIEW-{suffix}-DUE-A3,3,ITEM-D1,产品D1,30,3000,2026-04-01,{due},未出库,未出库,,0,0,0\n"
     )
     upload_resp = client.post(
         f"/v1/upload-jobs/{job_id}/files",
@@ -102,12 +102,12 @@ def _create_viewer_mix_job_with_unique_orders(suffix: str) -> str:
     outbound_85 = (date.today() - timedelta(days=85)).isoformat()
     outbound_65 = (date.today() - timedelta(days=65)).isoformat()
     csv_content = (
-        "客户,客户订单号,分录行号,料号,品名,数量,金额,订单日期,交期,最近出库日期,行已执行已出库数量,行已开票数量,行未开票数量\n"
-        f"A客户{suffix},SO-VIEW-{suffix}-INV-A1,1,ITEM-A1,产品A1,100,52000,2026-01-05,2026-01-20,{outbound_95},100,0,100\n"
-        f"A客户{suffix},SO-VIEW-{suffix}-INV-A2,2,ITEM-A2,产品A2,50,,2026-01-06,2026-01-20,{outbound_65},50,10,40\n"
-        f"B客户{suffix},SO-VIEW-{suffix}-INV-B1,1,ITEM-B1,产品B1,80,18000,2026-01-07,2026-01-20,{outbound_85},80,0,80\n"
-        f"C客户{suffix},SO-VIEW-{suffix}-INV-C1,1,ITEM-C1,产品C1,20,9000,2026-01-08,2026-01-20,{outbound_65},20,0,20\n"
-        f"A客户{suffix},SO-VIEW-{suffix}-DUE-A3,3,ITEM-D1,产品D1,30,3000,2026-04-01,{due},,0,0,0\n"
+        "客户,客户订单号,分录行号,料号,品名,数量,金额,订单日期,交期,出库状态,行出库状态,最近出库日期,行已执行已出库数量,行已开票数量,行未开票数量\n"
+        f"A客户{suffix},SO-VIEW-{suffix}-INV-A1,1,ITEM-A1,产品A1,100,52000,2026-01-05,2026-01-20,部分出库,全部出库,{outbound_95},100,0,100\n"
+        f"A客户{suffix},SO-VIEW-{suffix}-INV-A2,2,ITEM-A2,产品A2,50,,2026-01-06,2026-01-20,部分出库,全部出库,{outbound_65},50,10,40\n"
+        f"B客户{suffix},SO-VIEW-{suffix}-INV-B1,1,ITEM-B1,产品B1,80,18000,2026-01-07,2026-01-20,全部出库,全部出库,{outbound_85},80,0,80\n"
+        f"C客户{suffix},SO-VIEW-{suffix}-INV-C1,1,ITEM-C1,产品C1,20,9000,2026-01-08,2026-01-20,全部出库,全部出库,{outbound_65},20,0,20\n"
+        f"A客户{suffix},SO-VIEW-{suffix}-DUE-A3,3,ITEM-D1,产品D1,30,3000,2026-04-01,{due},未出库,未出库,,0,0,0\n"
     )
     upload_resp = client.post(
         f"/v1/upload-jobs/{job_id}/files",

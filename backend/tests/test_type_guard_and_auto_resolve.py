@@ -71,12 +71,15 @@ def _build_order_csv(
     latest_outbound_date: str,
     executed_shipped_qty: float,
     uninvoiced_qty: float,
+    invoiced_qty: float = 0,
+    order_outbound_status: str = "全部出库",
+    line_outbound_status: str = "全部出库",
 ) -> str:
     entry_line_text = "" if entry_line_no is None else entry_line_no
     return (
-        "客户,合同号,客户订单号,分录行号,料号,品名,数量,金额,订单日期,交期,最近出库日期,行已执行已出库数量,行未开票数量\n"
+        "客户,合同号,客户订单号,分录行号,料号,品名,数量,金额,订单日期,交期,出库状态,行出库状态,最近出库日期,行已执行已出库数量,行已开票数量,行未开票数量\n"
         f"{customer},{contract_no},{customer_order_no},{entry_line_text},{item_code},{item_name},{quantity},{amount},"
-        f"{order_date},{due_date},{latest_outbound_date},{executed_shipped_qty},{uninvoiced_qty}\n"
+        f"{order_date},{due_date},{order_outbound_status},{line_outbound_status},{latest_outbound_date},{executed_shipped_qty},{invoiced_qty},{uninvoiced_qty}\n"
     )
 
 
@@ -153,6 +156,10 @@ def test_type_guard_blocks_high_confidence_mismatch_for_image(monkeypatch):
 
 def test_order_numeric_update_drives_alert_and_preserves_manual_override(monkeypatch):
     headers = {"X-Role": "admin"}
+    suffix = str(time.time_ns())[-8:]
+    contract_no = f"HT-200-{suffix}"
+    order_no = f"SO-200-{suffix}"
+    item_code = f"ITEM-200-{suffix}"
 
     current_rule = client.get("/v1/config/rule_parameters", headers=headers)
     assert current_rule.status_code == 200
@@ -182,8 +189,8 @@ def test_order_numeric_update_drives_alert_and_preserves_manual_override(monkeyp
 
         outbound_date = (date.today() - timedelta(days=60)).isoformat()
         order_csv = (
-            "客户,合同号,客户订单号,料号,品名,数量,金额,订单日期,交期,关闭状态,行关闭状态,最近出库日期,行已执行已出库数量,行未开票数量\n"
-            f"A客户,HT-200,SO-200,ITEM-200,产品200,100,1000,2026-03-01,{(date.today() + timedelta(days=10)).isoformat()},已关闭,已关闭,{outbound_date},20,20\n"
+            "客户,合同号,客户订单号,分录行号,料号,品名,数量,金额,订单日期,交期,关闭状态,行关闭状态,出库状态,行出库状态,最近出库日期,行已执行已出库数量,行已开票数量,行未开票数量\n"
+            f"A客户,{contract_no},{order_no},1,{item_code},产品200,100,1000,2026-03-01,{(date.today() + timedelta(days=10)).isoformat()},已关闭,已关闭,全部出库,全部出库,{outbound_date},20,0,20\n"
         )
 
         r_order = client.post(
@@ -196,8 +203,8 @@ def test_order_numeric_update_drives_alert_and_preserves_manual_override(monkeyp
 
         def _fake_ocr(path):
             return (
-                "客户: A客户\n合同号: HT-200\n订单号: SO-200\n"
-                "料号: ITEM-200\n品名: 产品200\n金额: 1000\n开票日期: 2026-03-19\n正式发票: 是\n"
+                f"客户: A客户\n合同号: {contract_no}\n订单号: {order_no}\n"
+                f"料号: {item_code}\n品名: 产品200\n金额: 1000\n开票日期: 2026-03-19\n正式发票: 是\n"
             )
 
         monkeypatch.setattr("app.services.parsers.ocr_any", _fake_ocr)
@@ -237,8 +244,8 @@ def test_order_numeric_update_drives_alert_and_preserves_manual_override(monkeyp
         assert still_open["payload"]["manual_override_state"] == "suppressed"
 
         updated_order_csv = (
-            "客户,合同号,客户订单号,料号,品名,数量,金额,订单日期,交期,关闭状态,行关闭状态,最近出库日期,行已执行已出库数量,行未开票数量\n"
-            f"A客户,HT-200,SO-200,ITEM-200,产品200,100,1000,2026-03-02,{(date.today() + timedelta(days=10)).isoformat()},未关闭,未关闭,{outbound_date},20,0\n"
+            "客户,合同号,客户订单号,分录行号,料号,品名,数量,金额,订单日期,交期,关闭状态,行关闭状态,出库状态,行出库状态,最近出库日期,行已执行已出库数量,行已开票数量,行未开票数量\n"
+            f"A客户,{contract_no},{order_no},1,{item_code},产品200,100,1000,2026-03-02,{(date.today() + timedelta(days=10)).isoformat()},未关闭,未关闭,全部出库,全部出库,{outbound_date},20,20,0\n"
         )
         r_order_fix = client.post(
             f"/v1/upload-jobs/{job_id}/files",

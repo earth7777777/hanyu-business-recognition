@@ -8,6 +8,7 @@ from app.services.normalize_service import parse_date
 
 RULE_DUE_BEFORE_SHIP = "due_before_ship"
 RULE_SHIP_AFTER_NO_FINANCE = "ship_after_no_finance"
+RULE_SHIP_AFTER_NO_FINANCE_REQUIRE_ORDER_FULLY_OUTBOUND = "ship_after_no_finance_require_order_fully_outbound"
 _ZERO_IF_EMPTY_QTY_FIELDS = {"executed_shipped_qty", "invoiced_qty", "uninvoiced_qty"}
 
 
@@ -31,6 +32,10 @@ def _to_business_qty(value: Any, *, field: str) -> float | None:
 
 def _is_diff(left: float, right: float) -> bool:
     return abs(left - right) > 1e-9
+
+
+def _is_fully_outbound(value: Any) -> bool:
+    return str(value or "").strip().lower() == "fully_outbound"
 
 
 def _fmt_num(value: float | None) -> str:
@@ -171,6 +176,10 @@ def _line_inputs(group: dict[str, Any]) -> list[dict[str, Any]]:
             "due_date": agg.get("due_date"),
             "executed_shipped_qty": agg.get("executed_shipped_qty"),
             "latest_outbound_date": agg.get("latest_outbound_date"),
+            "order_outbound_status": agg.get("order_outbound_status"),
+            "line_outbound_status": agg.get("line_outbound_status"),
+            "order_outbound_status_raw": agg.get("order_outbound_status_raw"),
+            "line_outbound_status_raw": agg.get("line_outbound_status_raw"),
             "invoiced_qty": agg.get("invoiced_qty"),
             "uninvoiced_qty": agg.get("uninvoiced_qty"),
             "line_invoice_status": agg.get("line_invoice_status"),
@@ -186,6 +195,9 @@ def run_alerts(groups: list[dict[str, Any]], rule_params: dict[str, Any], today:
     enabled = rule_params.get("enabled", {})
     n_due = int(rule_params.get("due_before_ship_days", 5))
     n_ship = int(rule_params.get("ship_after_no_finance_days", 60))
+    require_order_fully_outbound = bool(
+        rule_params.get(RULE_SHIP_AFTER_NO_FINANCE_REQUIRE_ORDER_FULLY_OUTBOUND, False)
+    )
 
     alerts: list[dict[str, Any]] = []
 
@@ -200,6 +212,9 @@ def run_alerts(groups: list[dict[str, Any]], rule_params: dict[str, Any], today:
             executed_shipped_qty = _to_business_qty(line.get("executed_shipped_qty"), field="executed_shipped_qty")
             due = parse_date(line.get("due_date"))
             latest_outbound_date = parse_date(line.get("latest_outbound_date"))
+            order_outbound_status = line.get("order_outbound_status")
+            line_outbound_status = line.get("line_outbound_status")
+            invoiced_qty = _to_business_qty(line.get("invoiced_qty"), field="invoiced_qty")
             uninvoiced_qty = _to_business_qty(line.get("uninvoiced_qty"), field="uninvoiced_qty")
 
             payload_common = {
@@ -215,6 +230,10 @@ def run_alerts(groups: list[dict[str, Any]], rule_params: dict[str, Any], today:
                 "item_code": line.get("item_code"),
                 "item_name": line.get("item_name"),
                 "amount": amount,
+                "order_outbound_status": order_outbound_status,
+                "line_outbound_status": line_outbound_status,
+                "order_outbound_status_raw": line.get("order_outbound_status_raw"),
+                "line_outbound_status_raw": line.get("line_outbound_status_raw"),
                 "order_unshipped_qty": _order_unshipped_qty(quantity, executed_shipped_qty),
             }
 
@@ -251,9 +270,9 @@ def run_alerts(groups: list[dict[str, Any]], rule_params: dict[str, Any], today:
 
             if enabled.get(RULE_SHIP_AFTER_NO_FINANCE, True):
                 if (
-                    latest_outbound_date
-                    and executed_shipped_qty is not None
-                    and executed_shipped_qty > 0
+                    _is_fully_outbound(line_outbound_status)
+                    and (not require_order_fully_outbound or _is_fully_outbound(order_outbound_status))
+                    and latest_outbound_date
                     and uninvoiced_qty is not None
                     and uninvoiced_qty > 0
                 ):
@@ -276,7 +295,9 @@ def run_alerts(groups: list[dict[str, Any]], rule_params: dict[str, Any], today:
                                 "payload": {
                                     **payload_common,
                                     "days_after_outbound": days_after_outbound,
+                                    "quantity": quantity,
                                     "executed_shipped_qty": executed_shipped_qty,
+                                    "invoiced_qty": invoiced_qty,
                                     "uninvoiced_qty": uninvoiced_qty,
                                     "latest_outbound_date": latest_outbound_date.isoformat(),
                                     "n_days": n_ship,

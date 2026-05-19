@@ -42,6 +42,11 @@ def _line(
     amount: float | None = None,
     due_date: str | None = None,
     latest_outbound_date: str | None = None,
+    order_outbound_status: str | None = "fully_outbound",
+    line_outbound_status: str | None = "fully_outbound",
+    order_outbound_status_raw: str | None = "全部出库",
+    line_outbound_status_raw: str | None = "全部出库",
+    invoiced_qty: float | None = None,
     uninvoiced_qty: float | None = None,
     order_closed: bool | None = None,
     line_closed: bool | None = None,
@@ -61,6 +66,11 @@ def _line(
         "executed_shipped_qty": executed_shipped_qty,
         "due_date": due_date,
         "latest_outbound_date": latest_outbound_date,
+        "order_outbound_status": order_outbound_status,
+        "line_outbound_status": line_outbound_status,
+        "order_outbound_status_raw": order_outbound_status_raw,
+        "line_outbound_status_raw": line_outbound_status_raw,
+        "invoiced_qty": invoiced_qty,
         "uninvoiced_qty": uninvoiced_qty,
         "order_closed": order_closed,
         "line_closed": line_closed,
@@ -425,6 +435,10 @@ def test_ship_after_no_finance_uses_60_day_threshold_and_order_digits():
                         quantity=100,
                         executed_shipped_qty=0,
                         latest_outbound_date=(today - timedelta(days=80)).isoformat(),
+                        order_outbound_status="not_outbound",
+                        line_outbound_status="not_outbound",
+                        order_outbound_status_raw="未出库",
+                        line_outbound_status_raw="未出库",
                         uninvoiced_qty=20,
                     )
                 ],
@@ -458,6 +472,112 @@ def test_ship_after_no_finance_uses_60_day_threshold_and_order_digits():
     assert len(alerts) == 1
     assert alerts[0]["alert_type"] == RULE_SHIP_AFTER_NO_FINANCE
     assert alerts[0]["group_key"] == "g60"
+
+
+def test_ship_after_no_finance_requires_line_fully_outbound_and_optional_order_switch():
+    today = date(2026, 5, 19)
+    base_line = {
+        "source_row": 1,
+        "customer": "A",
+        "quantity": 100,
+        "executed_shipped_qty": 100,
+        "latest_outbound_date": (today - timedelta(days=60)).isoformat(),
+        "uninvoiced_qty": 20,
+    }
+    groups = [
+        {
+            "group_key": "missing-line-status",
+            "aggregate": {
+                "line_candidates": [
+                    _line(
+                        record_id="missing-line-status",
+                        line_key="line:missing-line-status",
+                        order_outbound_status="fully_outbound",
+                        line_outbound_status=None,
+                        order_outbound_status_raw="全部出库",
+                        line_outbound_status_raw=None,
+                        **base_line,
+                    )
+                ],
+            },
+        },
+        {
+            "group_key": "partial-line-status",
+            "aggregate": {
+                "line_candidates": [
+                    _line(
+                        record_id="partial-line-status",
+                        line_key="line:partial-line-status",
+                        order_outbound_status="fully_outbound",
+                        line_outbound_status="partially_outbound",
+                        order_outbound_status_raw="全部出库",
+                        line_outbound_status_raw="部分出库",
+                        **base_line,
+                    )
+                ],
+            },
+        },
+        {
+            "group_key": "partial-order-line-full",
+            "aggregate": {
+                "line_candidates": [
+                    _line(
+                        record_id="partial-order-line-full",
+                        line_key="line:partial-order-line-full",
+                        order_outbound_status="partially_outbound",
+                        line_outbound_status="fully_outbound",
+                        order_outbound_status_raw="部分出库",
+                        line_outbound_status_raw="全部出库",
+                        **base_line,
+                    )
+                ],
+            },
+        },
+        {
+            "group_key": "full-order-line-full",
+            "aggregate": {
+                "line_candidates": [
+                    _line(
+                        record_id="full-order-line-full",
+                        line_key="line:full-order-line-full",
+                        order_outbound_status="fully_outbound",
+                        line_outbound_status="fully_outbound",
+                        order_outbound_status_raw="全部出库",
+                        line_outbound_status_raw="全部出库",
+                        **base_line,
+                    )
+                ],
+            },
+        },
+    ]
+    default_rules = {
+        "enabled": {"due_before_ship": False, "ship_after_no_finance": True},
+        "due_before_ship_days": 5,
+        "ship_after_no_finance_days": 60,
+        "ship_after_no_finance_require_order_fully_outbound": False,
+    }
+
+    default_alerts = run_alerts(groups, default_rules, today=today)
+    assert {item["group_key"] for item in default_alerts} == {
+        "partial-order-line-full",
+        "full-order-line-full",
+    }
+
+    strict_rules = {
+        **default_rules,
+        "ship_after_no_finance_require_order_fully_outbound": True,
+    }
+    strict_alerts = run_alerts(groups, strict_rules, today=today)
+    assert {item["group_key"] for item in strict_alerts} == {"full-order-line-full"}
+    strict_payload = strict_alerts[0]["payload"]
+    assert strict_payload["order_outbound_status"] == "fully_outbound"
+    assert strict_payload["line_outbound_status"] == "fully_outbound"
+    assert strict_payload["order_outbound_status_raw"] == "全部出库"
+    assert strict_payload["line_outbound_status_raw"] == "全部出库"
+    assert strict_payload["quantity"] == 100.0
+    assert strict_payload["executed_shipped_qty"] == 100.0
+    assert strict_payload["invoiced_qty"] == 0.0
+    assert strict_payload["uninvoiced_qty"] == 20.0
 
 
 def test_completed_skip_scan_lines_do_not_enter_alerts():

@@ -94,6 +94,7 @@ DEFAULTS: dict[str, dict] = {
         },
         "due_before_ship_days": 5,
         "ship_after_no_finance_days": 60,
+        "ship_after_no_finance_require_order_fully_outbound": False,
     },
     "orchestrator_profile": {
         "provider": "copaw",
@@ -347,15 +348,33 @@ def _ensure_rule_parameter_defaults(db: Session) -> None:
     if not isinstance(current, dict):
         return
 
+    changed = False
+
+    default_enabled = DEFAULTS["rule_parameters"].get("enabled", {})
+    enabled = dict(current.get("enabled")) if isinstance(current.get("enabled"), dict) else {}
+    for key, value in default_enabled.items():
+        if key not in enabled:
+            enabled[key] = value
+            changed = True
+    current["enabled"] = enabled
+
+    for key, value in DEFAULTS["rule_parameters"].items():
+        if key == "enabled":
+            continue
+        if key not in current:
+            current[key] = value
+            changed = True
+
     # Upgrade legacy/test threshold values to the new 60-day business default,
     # while preserving any other explicit user override.
     current_ship_days = current.get("ship_after_no_finance_days")
-    if current_ship_days not in {0, "0", 7, "7"}:
-        return
+    if current_ship_days in {0, "0", 7, "7"}:
+        current["ship_after_no_finance_days"] = 60
+        changed = True
 
-    current["ship_after_no_finance_days"] = 60
-    item.value_json = current
-    db.commit()
+    if changed:
+        item.value_json = current
+        db.commit()
 
 
 def _ensure_retention_policy_defaults(db: Session) -> None:

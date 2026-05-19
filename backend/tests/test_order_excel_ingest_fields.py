@@ -239,6 +239,25 @@ def test_init_db_backfills_order_outbound_status_aliases_for_existing_field_mapp
         assert "行出库状态" in (order_map.get("line_outbound_status") or [])
 
 
+def test_init_db_backfills_ship_after_no_finance_order_outbound_switch_default():
+    with SessionLocal() as db:
+        item = db.get(ConfigEntry, "rule_parameters")
+        assert item is not None
+        current = dict(item.value_json or {})
+        current.pop("ship_after_no_finance_require_order_fully_outbound", None)
+        item.value_json = current
+        db.commit()
+
+    init_db()
+
+    with SessionLocal() as db:
+        item = db.get(ConfigEntry, "rule_parameters")
+        assert item is not None
+        value = dict(item.value_json or {})
+        assert value["ship_after_no_finance_require_order_fully_outbound"] is False
+        assert value["ship_after_no_finance_days"] == 60
+
+
 def test_order_excel_duplicate_import_auto_deletes_new_strict_duplicate_and_keeps_single_current():
     headers = {"X-Role": "admin"}
     order_no = "DOC-GOV-DUP-001"

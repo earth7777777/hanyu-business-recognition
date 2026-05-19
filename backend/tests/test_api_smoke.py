@@ -99,6 +99,7 @@ def test_orchestrate_route_and_legacy_alias():
 
 def test_three_order_lines_should_trigger_two_ship_after_no_finance_alerts():
     headers = {"X-Role": "admin"}
+    order_no = f"3541-2508130046-{time.time_ns()}"
 
     current_rule = client.get("/v1/config/rule_parameters", headers=headers)
     assert current_rule.status_code == 200
@@ -119,10 +120,10 @@ def test_three_order_lines_should_trigger_two_ship_after_no_finance_alerts():
         job_id = create_resp.json()["id"]
 
         csv_content = (
-            "客户,客户订单号,分录行号,商品名称,商品编码,数量,订单日期,预计交货日期,最近出库日期,行已执行已出库数量,行已开票数量,行未开票数量,行开票状态\n"
-            "安吉热威,3541-2508130046,1,上泵体,0101-HET-8.5S3828-5,81,2025-08-01,2025-08-22,2025-08-23,81,,81,未开票\n"
-            "安吉热威,3541-2508130046,2,微动开关安装架,0101-HET-8.5S3828-7,3600,2025-08-01,2025-08-22,2025-08-16,3600,3122,478,部分开票\n"
-            "安吉热威,3541-2508130046,3,上泵体,0101-HET-8.5S3832-2,45,2025-08-01,2025-08-22,2025-08-23,45,45,,全部开票\n"
+            "客户,客户订单号,分录行号,商品名称,商品编码,数量,订单日期,预计交货日期,出库状态,行出库状态,最近出库日期,行已执行已出库数量,行已开票数量,行未开票数量,行开票状态\n"
+            f"安吉热威,{order_no},1,上泵体,0101-HET-8.5S3828-5,81,2025-08-01,2025-08-22,部分出库,全部出库,2025-08-23,81,,81,未开票\n"
+            f"安吉热威,{order_no},2,微动开关安装架,0101-HET-8.5S3828-7,3600,2025-08-01,2025-08-22,部分出库,全部出库,2025-08-16,3600,3122,478,部分开票\n"
+            f"安吉热威,{order_no},3,上泵体,0101-HET-8.5S3832-2,45,2025-08-01,2025-08-22,部分出库,全部出库,2025-08-23,45,45,,全部开票\n"
         )
 
         upload_resp = client.post(

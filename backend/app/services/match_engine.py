@@ -14,6 +14,7 @@ class RecordView:
     id: str
     document_type: str
     core: dict[str, Any]
+    ext: dict[str, Any]
     created_at: datetime | None = None
     source_row: int = 0
 
@@ -195,6 +196,7 @@ def _line_key(rec: RecordView) -> tuple[str, str]:
 
 def _build_line_candidate(rec: RecordView) -> dict[str, Any]:
     core = rec.core
+    ext = rec.ext
     due_date = parse_date(core.get("due_date"))
     latest_outbound_date = parse_date(core.get("latest_outbound_date"))
     line_key, confidence = _line_key(rec)
@@ -216,6 +218,8 @@ def _build_line_candidate(rec: RecordView) -> dict[str, Any]:
         "latest_outbound_date": latest_outbound_date.isoformat() if latest_outbound_date else None,
         "order_outbound_status": core.get("order_outbound_status"),
         "line_outbound_status": core.get("line_outbound_status"),
+        "order_outbound_status_raw": ext.get("order_outbound_status_raw"),
+        "line_outbound_status_raw": ext.get("line_outbound_status_raw"),
         "invoiced_qty": _to_float(core.get("invoiced_qty")),
         "uninvoiced_qty": _to_float(core.get("uninvoiced_qty")),
         "line_invoice_status": core.get("line_invoice_status"),
@@ -231,6 +235,11 @@ def run_match(records: list[Any], template: dict[str, Any]) -> list[dict[str, An
             id=r.id,
             document_type=r.document_type,
             core=get_core(r.payload_json),
+            ext=(
+                r.payload_json.get("ext", {})
+                if isinstance(r.payload_json, dict) and isinstance(r.payload_json.get("ext"), dict)
+                else {}
+            ),
             created_at=getattr(r, "created_at", None),
             source_row=int(getattr(r, "source_row", 0) or 0),
         )
@@ -386,6 +395,7 @@ def _aggregate(records: list[RecordView]) -> dict[str, Any]:
     line_candidates.sort(key=lambda x: (int(x.get("source_row") or 0), str(x.get("record_id") or "")))
 
     winner_core = winner.core if winner else {}
+    winner_ext = winner.ext if winner else {}
     quantity = _to_float(winner_core.get("quantity"))
     amount = _to_float(winner_core.get("amount"))
     executed_shipped_qty = _to_float(winner_core.get("executed_shipped_qty"))
@@ -405,6 +415,8 @@ def _aggregate(records: list[RecordView]) -> dict[str, Any]:
         "latest_outbound_date": latest_outbound_date.isoformat() if latest_outbound_date else None,
         "order_outbound_status": winner_core.get("order_outbound_status"),
         "line_outbound_status": winner_core.get("line_outbound_status"),
+        "order_outbound_status_raw": winner_ext.get("order_outbound_status_raw"),
+        "line_outbound_status_raw": winner_ext.get("line_outbound_status_raw"),
         "invoiced_qty": invoiced_qty,
         "uninvoiced_qty": uninvoiced_qty,
         "order_closed": winner_core.get("order_closed"),
