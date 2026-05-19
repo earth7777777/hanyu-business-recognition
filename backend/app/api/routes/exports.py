@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import db_dep, role_dep
-from app.services.export_service import export_alerts_csv, export_customer_summary_csv
+from app.services.export_service import export_alerts_csv, export_customer_summary_csv, export_uninvoiced_html
 
 router = APIRouter(prefix="/exports", tags=["exports"])
 
@@ -24,13 +24,27 @@ def export_data(body: dict, db: Session = Depends(db_dep), role: str = Depends(r
 
     if kind == "alerts":
         data = export_alerts_csv(db, job_id)
-        filename = f"alerts-{job_id}-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}.csv"
+        filename = f"alerts-{job_id}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}.csv"
     else:
         data = export_customer_summary_csv(db, job_id)
-        filename = f"customer-summary-{job_id}-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}.csv"
+        filename = f"customer-summary-{job_id}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}.csv"
 
     return Response(
         content=data,
         media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/uninvoiced/html")
+def export_uninvoiced_html_data(db: Session = Depends(db_dep), role: str = Depends(role_dep)):
+    _ = role
+    data = export_uninvoiced_html(db)
+    if data is None:
+        raise HTTPException(status_code=404, detail="当前没有超60天没开票数据")
+    filename = f"uninvoiced-html-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}.html"
+    return Response(
+        content=data,
+        media_type="text/html; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
