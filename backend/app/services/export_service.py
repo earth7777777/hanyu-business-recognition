@@ -79,11 +79,11 @@ class _OrderSection:
 
     @property
     def urgent_amount(self) -> float:
-        return _sum_known_amount(line.amount for line in self.should_lines)
+        return _sum_known_amount(_line_uninvoiced_amount(line) for line in self.should_lines)
 
     @property
     def urgent_amount_missing(self) -> bool:
-        return any(line.amount is None for line in self.should_lines)
+        return any(_line_uninvoiced_amount(line) is None for line in self.should_lines)
 
     @property
     def hold_amount(self) -> float:
@@ -99,10 +99,15 @@ class _OrderSection:
         return max(values) if values else None
 
     @property
+    def max_days_after_outbound(self) -> int | None:
+        values = [line.days_after_outbound for line in self.should_lines if line.days_after_outbound is not None]
+        return max(values) if values else None
+
+    @property
     def status_label(self) -> str:
         if _is_fully_outbound(self.order_outbound_status):
-            return "整单已发完 / 应催"
-        return "部分发货 / 有产品应催"
+            return "整单已发完"
+        return "整单未发完"
 
 
 @dataclass
@@ -131,6 +136,11 @@ class _CustomerSection:
         values = [order.max_days_over_threshold for order in self.orders if order.max_days_over_threshold is not None]
         return max(values) if values else None
 
+    @property
+    def max_days_after_outbound(self) -> int | None:
+        values = [order.max_days_after_outbound for order in self.orders if order.max_days_after_outbound is not None]
+        return max(values) if values else None
+
 
 def _sum_known_amount(values) -> float:
     total = 0.0
@@ -148,6 +158,16 @@ def _line_invoiced_amount(line: _ExportLine) -> float | None:
     if line.amount is None or line.quantity is None or line.quantity <= 0:
         return None
     return round(float(line.amount) * float(line.invoiced_qty) / float(line.quantity), 6)
+
+
+def _line_uninvoiced_amount(line: _ExportLine) -> float | None:
+    if line.uninvoiced_qty is None:
+        return None
+    if line.uninvoiced_qty <= 0:
+        return 0.0
+    if line.amount is None or line.quantity is None or line.quantity <= 0:
+        return None
+    return round(float(line.amount) * float(line.uninvoiced_qty) / float(line.quantity), 6)
 
 
 def _clean_text(value: Any, default: str = "") -> str:
@@ -174,6 +194,16 @@ def _is_invoice_done(line: _ExportLine) -> bool:
     if line.quantity is not None and line.invoiced_qty is not None:
         return line.quantity > 0 and line.invoiced_qty >= line.quantity
     return False
+
+
+def _line_invoice_tag(line: _ExportLine) -> str:
+    if line.invoiced_qty is None or line.uninvoiced_qty is None:
+        return "开票状态暂无"
+    if line.uninvoiced_qty <= 0:
+        return "产品已开完"
+    if line.invoiced_qty <= 0:
+        return "产品未开票"
+    return "产品已部分开票"
 
 
 def _fmt_num(value: float | None) -> str:
@@ -453,70 +483,47 @@ def _build_customer_sections(db: Session, generated_at: datetime) -> list[_Custo
     return customers
 
 
-def _render_line(line: _ExportLine, kind: str) -> str:
-    status_label = {
-        "should": "应该催票",
-        "done": "已开完，不用催",
-        "hold": "先不催",
-    }[kind]
-    if kind == "should":
-        metrics = [
-            ("还差开票金额", _fmt_amount(line.amount)),
-            ("还差开票数量", _fmt_num(line.uninvoiced_qty)),
-            ("已开票数量", _fmt_num(line.invoiced_qty)),
-            ("订单数量", _fmt_num(line.quantity)),
-            ("已出库数量", _fmt_num(line.executed_shipped_qty)),
-            ("最近出库日期", line.latest_outbound_date),
-            ("距最近出库", _fmt_days(line.days_after_outbound)),
-            ("已超过60天", _fmt_days(line.days_over_threshold)),
-        ]
-    elif kind == "hold":
-        metrics = [
-            ("订单数量", _fmt_num(line.quantity)),
-            ("已出库数量", _fmt_num(line.executed_shipped_qty)),
-            ("未发完数量", _fmt_num(line.order_unshipped_qty)),
-            ("已开票数量", _fmt_num(line.invoiced_qty)),
-            ("未开票数量", _fmt_num(line.uninvoiced_qty)),
-            ("未开票金额", _fmt_amount(line.amount)),
-        ]
-    else:
-        metrics = [
-            ("订单数量", _fmt_num(line.quantity)),
-            ("已开票数量", _fmt_num(line.invoiced_qty)),
-        ]
+def _render_line(line: _ExportLine) -> str:
+    invoice_tag = _line_invoice_tag(line)
+    uninvoiced_amount = _line_uninvoiced_amount(line)
+    metrics = [
+        ("还差开票金额", _fmt_amount(uninvoiced_amount)),
+        ("还差开票数量", _fmt_num(line.uninvoiced_qty)),
+        ("已开票数量", _fmt_num(line.invoiced_qty)),
+        ("订单数量", _fmt_num(line.quantity)),
+        ("已出库数量", _fmt_num(line.executed_shipped_qty)),
+        ("最近出库日期", line.latest_outbound_date),
+        ("出库天数", _fmt_days(line.days_after_outbound)),
+    ]
     metric_html = "".join(
         f"<span><b>{escape(label)}</b>{escape(str(value))}</span>" for label, value in metrics
     )
-    muted_class = " product-line--muted" if kind == "done" else ""
     return (
-        f'<div class="product-line product-line--{kind}{muted_class}">'
+        f'<div class="product-line product-line--should">'
         f'<div class="product-main">'
         f'<span class="product-name">{escape(line.product)}</span>'
-        f'<span class="line-tag">{escape(status_label)}</span>'
+        f'<span class="line-tag">{escape(invoice_tag)}</span>'
         f"</div>"
         f'<div class="line-metrics">{metric_html}</div>'
         f"</div>"
     )
 
 
-def _render_order(order: _OrderSection) -> str:
-    should_html = "".join(_render_line(line, "should") for line in order.should_lines)
-    done_html = "".join(_render_line(line, "done") for line in order.done_lines)
-    hold_html = "".join(_render_line(line, "hold") for line in order.hold_lines)
+def _render_order(order: _OrderSection, *, order_index: int, order_total: int) -> str:
+    should_html = "".join(_render_line(line) for line in order.should_lines)
     order_qty = _sum_known_amount(line.quantity for line in order.lines)
     invoiced_qty = _sum_known_amount(line.invoiced_qty for line in order.lines)
     pending_qty = _sum_known_amount(line.uninvoiced_qty for line in order.should_lines)
+    order_index_text = f"订单 {order_index}/{order_total}"
     summary = [
-        ("订单总量", _fmt_num(order_qty)),
         ("订单总金额", _fmt_total_amount(order.total_amount, order.total_amount_missing)),
-        ("已开票数量", _fmt_num(invoiced_qty)),
         ("已开票金额", _fmt_total_amount(order.invoiced_amount, order.invoiced_amount_missing)),
-        ("还差开票数量", _fmt_num(pending_qty)),
         ("还差开票金额", _fmt_total_amount(order.urgent_amount, order.urgent_amount_missing)),
+        ("订单总量", _fmt_num(order_qty)),
+        ("已开票数量", _fmt_num(invoiced_qty)),
+        ("还差开票数量", _fmt_num(pending_qty)),
     ]
     summary_html = "".join(f"<span><b>{escape(label)}</b>{escape(value)}</span>" for label, value in summary)
-    done_section = f'<section><h4>不用催</h4>{done_html}</section>' if done_html else ""
-    hold_section = f'<section><h4>还没发完，先不催</h4>{hold_html}</section>' if hold_html else ""
     return f"""
       <article class="order-card">
         <header class="order-header">
@@ -531,38 +538,40 @@ def _render_order(order: _OrderSection) -> str:
           </div>
         </header>
         <div class="order-summary">{summary_html}</div>
-        <section>
-          <h4>已发完，应该催票</h4>
-          {should_html}
-        </section>
-        {done_section}
-        {hold_section}
+        {should_html}
+        <div class="order-index">{escape(order_index_text)}</div>
       </article>
     """
 
 
 def _render_html(customers: list[_CustomerSection], generated_at: datetime) -> str:
     total_urgent = _sum_known_amount(customer.urgent_amount for customer in customers)
-    total_hold = _sum_known_amount(customer.hold_amount for customer in customers)
     total_urgent_missing = any(customer.urgent_amount_missing for customer in customers)
-    total_hold_missing = any(customer.hold_amount_missing for customer in customers)
     order_count = sum(len(customer.orders) for customer in customers)
     generated_text = generated_at.astimezone(_SH_TZ).strftime("%Y-%m-%d %H:%M")
     customer_html: list[str] = []
-    for customer in customers:
+    customer_total = len(customers)
+    for customer_index, customer in enumerate(customers, start=1):
+        customer_index_text = f"客户 {customer_index}/{customer_total}"
         summary = [
             ("应催金额", _fmt_total_amount(customer.urgent_amount, customer.urgent_amount_missing)),
-            ("未发完暂不催金额", _fmt_total_amount(customer.hold_amount, customer.hold_amount_missing)),
-            ("最长已超", _fmt_days(customer.max_days_over_threshold)),
+            ("出库天数", _fmt_days(customer.max_days_after_outbound)),
             ("相关订单数", f"{len(customer.orders)} 笔"),
         ]
         summary_html = "".join(f"<span><b>{escape(label)}</b>{escape(value)}</span>" for label, value in summary)
-        orders_html = "".join(_render_order(order) for order in customer.orders)
+        order_total = len(customer.orders)
+        orders_html = "".join(
+            _render_order(order, order_index=index, order_total=order_total)
+            for index, order in enumerate(customer.orders, start=1)
+        )
         customer_html.append(
             f"""
             <section class="customer-section">
               <div class="customer-summary">
-                <h2>{escape(customer.customer)}</h2>
+                <header class="customer-heading">
+                  <h2>{escape(customer.customer)}</h2>
+                  <span class="customer-index">{escape(customer_index_text)}</span>
+                </header>
                 <div>{summary_html}</div>
               </div>
               <div class="order-grid">{orders_html}</div>
@@ -589,7 +598,7 @@ def _render_html(customers: list[_CustomerSection], generated_at: datetime) -> s
     .topbar {{ margin-bottom: 18px; border-bottom: 2px solid #222; padding-bottom: 14px; }}
     h1 {{ margin: 0 0 8px; font-size: 30px; font-weight: 750; letter-spacing: 0; }}
     .export-time {{ color: #555; font-size: 13px; }}
-    .overview {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 18px 0 24px; }}
+    .overview {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 18px 0 24px; }}
     .overview-item, .customer-summary, .order-card {{
       background: #fff;
       border: 1px solid #cfcfc8;
@@ -601,12 +610,23 @@ def _render_html(customers: list[_CustomerSection], generated_at: datetime) -> s
     .overview-item strong {{ display: block; margin-top: 4px; font-size: 20px; }}
     .customer-section {{ margin-top: 22px; }}
     .customer-summary {{ padding: 14px; margin-bottom: 10px; border-left: 4px solid #222; }}
-    .customer-summary h2 {{ margin: 0 0 10px; font-size: 21px; }}
+    .customer-heading {{ display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }}
+    .customer-heading h2 {{ flex: 1; min-width: 0; margin: 0; font-size: 21px; overflow-wrap: anywhere; }}
+    .customer-index {{
+      border: 1px solid #777;
+      border-radius: 999px;
+      padding: 3px 8px;
+      color: #555;
+      font-size: 12px;
+      white-space: nowrap;
+      background: #fff;
+    }}
     .customer-summary div, .order-summary, .line-metrics {{
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 8px;
     }}
+    .order-summary {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
     .customer-summary span, .order-summary span, .line-metrics span {{
       border-top: 1px solid #e3e3de;
       padding-top: 6px;
@@ -620,7 +640,7 @@ def _render_html(customers: list[_CustomerSection], generated_at: datetime) -> s
       font-weight: 600;
       margin-bottom: 3px;
     }}
-    .order-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }}
+    .order-grid {{ display: grid; grid-template-columns: 1fr; gap: 12px; }}
     .order-card {{ padding: 14px; break-inside: avoid; page-break-inside: avoid; }}
     .order-header {{ display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start; border-bottom: 1px solid #d8d8d2; padding-bottom: 10px; }}
     .order-title strong, .order-title span {{ display: block; }}
@@ -637,16 +657,16 @@ def _render_html(customers: list[_CustomerSection], generated_at: datetime) -> s
     .amount-focus {{ grid-column: 1 / -1; padding-top: 6px; }}
     .amount-focus strong {{ display: block; margin-top: 2px; font-size: 24px; }}
     .order-summary {{ margin: 10px 0 12px; }}
+    .order-index {{ margin-top: 10px; text-align: right; color: #666; font-size: 12px; }}
     h4 {{ margin: 14px 0 8px; font-size: 14px; border-bottom: 1px solid #ecece7; padding-bottom: 5px; }}
     .product-line {{ border: 1px solid #dadad4; border-radius: 7px; padding: 10px; margin-top: 8px; background: #fff; }}
-    .product-line--hold {{ border-style: dashed; }}
-    .product-line--muted {{ color: #666; background: #fbfbfa; }}
     .product-main {{ display: flex; gap: 8px; align-items: center; justify-content: space-between; }}
     .product-name {{ font-weight: 700; min-width: 0; overflow-wrap: anywhere; }}
     .line-metrics {{ margin-top: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }}
     @media (max-width: 640px) {{
       main {{ padding: 18px 12px 32px; }}
-      .overview, .customer-summary div, .order-summary {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+      .overview, .customer-summary div {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+      .order-summary {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
       .order-grid {{ grid-template-columns: 1fr; }}
       h1 {{ font-size: 26px; }}
     }}
@@ -654,8 +674,8 @@ def _render_html(customers: list[_CustomerSection], generated_at: datetime) -> s
       @page {{ size: A4; margin: 10mm; }}
       body {{ background: #fff; }}
       main {{ max-width: none; padding: 0; }}
-      .overview {{ grid-template-columns: repeat(4, minmax(0, 1fr)); }}
-      .order-grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8mm; }}
+      .overview {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
+      .order-grid {{ grid-template-columns: 1fr; gap: 6mm; }}
       .order-card, .customer-summary, .overview-item {{ box-shadow: none; }}
       .customer-section {{ break-inside: auto; }}
     }}
@@ -671,7 +691,6 @@ def _render_html(customers: list[_CustomerSection], generated_at: datetime) -> s
       <div class="overview-item"><span>客户数</span><strong>{len(customers)}</strong></div>
       <div class="overview-item"><span>相关订单数</span><strong>{order_count}</strong></div>
       <div class="overview-item"><span>应催金额合计</span><strong>{escape(_fmt_total_amount(total_urgent, total_urgent_missing))}</strong></div>
-      <div class="overview-item"><span>未发完暂不催金额合计</span><strong>{escape(_fmt_total_amount(total_hold, total_hold_missing))}</strong></div>
     </section>
     {body}
   </main>

@@ -146,6 +146,21 @@ def test_uninvoiced_html_groups_customer_order_and_product_context():
         invoiced_qty=20,
         uninvoiced_qty=80,
     )
+    should_uninvoiced_core = _core(
+        customer="A客户",
+        order_no="SO-HTML-1",
+        line_no="4",
+        item_code="ITEM-D",
+        item_name="产品D",
+        quantity=5,
+        amount=500,
+        order_outbound_status="partially_outbound",
+        line_outbound_status="fully_outbound",
+        latest_outbound_date="2026-03-01",
+        executed_shipped_qty=5,
+        invoiced_qty=0,
+        uninvoiced_qty=5,
+    )
     done_core = _core(
         customer="A客户",
         order_no="SO-HTML-1",
@@ -195,7 +210,24 @@ def test_uninvoiced_html_groups_customer_order_and_product_context():
     _add_order_record(db, record_id="rec-done", job_id=job.id, file_id=file.id, source_row=2, core=done_core)
     _add_order_record(db, record_id="rec-hold", job_id=job.id, file_id=file.id, source_row=3, core=hold_core)
     _add_order_record(db, record_id="rec-no-alert", job_id=job.id, file_id=file.id, source_row=4, core=no_alert_core)
+    _add_order_record(
+        db,
+        record_id="rec-should-uninvoiced",
+        job_id=job.id,
+        file_id=file.id,
+        source_row=5,
+        core=should_uninvoiced_core,
+    )
     _add_alert(db, alert_id="alert-html", job_id=job.id, group_id=group.id, record_id="rec-should", core=should_core, days=79)
+    _add_alert(
+        db,
+        alert_id="alert-html-uninvoiced",
+        job_id=job.id,
+        group_id=group.id,
+        record_id="rec-should-uninvoiced",
+        core=should_uninvoiced_core,
+        days=79,
+    )
     db.commit()
 
     exported = export_uninvoiced_html(
@@ -209,23 +241,48 @@ def test_uninvoiced_html_groups_customer_order_and_product_context():
     assert "A客户" in html
     assert "SO-HTML-1" in html
     assert "产品A（ITEM-A）" in html
-    assert "产品B（ITEM-B）" in html
-    assert "产品C（ITEM-C）" in html
-    assert "已发完，应该催票" in html
-    assert "已开完，不用催" in html
-    assert "还没发完，先不催" in html
-    assert "未发完暂不催金额" in html
+    assert "产品D（ITEM-D）" in html
+    assert "产品B（ITEM-B）" not in html
+    assert "产品C（ITEM-C）" not in html
+    assert "已发完，应该催票" not in html
+    assert "应该催票" not in html
+    assert "产品已部分开票" in html
+    assert "产品未开票" in html
+    assert "已开完，不用催" not in html
+    assert "还没发完，先不催" not in html
+    assert "未发完暂不催金额" not in html
+    assert "未发完暂不催金额合计" not in html
     assert "订单总金额" in html
-    assert "¥61,000.00" in html
+    assert "¥61,500.00" in html
     assert "已开票金额" in html
     assert "¥11,400.00" in html
     assert "还差开票金额" in html
-    assert "¥52,000.00" in html
+    assert "¥41,600.00" in html
+    assert "¥42,100.00" in html
+    assert "¥52,500.00" not in html
     assert "已开票金额</b>暂无" not in html
+    assert "整单已发完 / 应催" not in html
+    assert "部分发货 / 有产品应催" not in html
+    assert "整单未发完" in html
+    assert "客户 1/1" in html
+    assert "订单 1/1" in html
+    order_summary = html.split('<div class="order-summary">', 1)[1].split("</div>", 1)[0]
+    assert order_summary.index("订单总金额") < order_summary.index("已开票金额")
+    assert order_summary.index("已开票金额") < order_summary.index("还差开票金额")
+    assert order_summary.index("还差开票金额") < order_summary.index("订单总量")
+    assert order_summary.index("订单总量") < order_summary.index("已开票数量")
+    assert order_summary.index("已开票数量") < order_summary.index("还差开票数量")
+    assert ".order-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }" in html
+    assert "出库天数" in html
+    assert "距最近出库" not in html
+    assert "已超过60天" not in html
+    assert "最长已超" not in html
     assert "SO-NO-ALERT" not in html
     assert "未解除" not in html
     assert "@media print" in html
-    assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in html
+    assert ".order-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }" in html
+    assert ".order-grid { grid-template-columns: 1fr; gap: 6mm; }" in html
+    assert ".order-grid { grid-template-columns: repeat(2, minmax(0, 1fr));" not in html
 
 
 def test_uninvoiced_html_skips_disabled_customer():
