@@ -90,6 +90,11 @@ button:hover {
   filter: brightness(1.08);
 }
 
+button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
 button[data-action="reset-password"] {
   background: #c2410c;
 }
@@ -105,6 +110,31 @@ pre {
 .hint {
   color: var(--muted);
   margin-top: 0;
+}
+
+.hint.is-success {
+  color: #166534;
+}
+
+.hint.is-error {
+  color: #b42318;
+}
+
+.uninvoiced-download-block {
+  border-top: 1px solid var(--border);
+  margin-top: 18px;
+  padding-top: 14px;
+}
+
+.uninvoiced-download-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.uninvoiced-download-actions button {
+  margin-right: 0;
 }
 
 table {

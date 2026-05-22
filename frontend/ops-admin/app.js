@@ -359,6 +359,7 @@ const state = {
     keyword: "",
     selectedCustomer: "",
   },
+  uninvoicedDownloadBusy: false,
   topBatchView: "all",
   topLifecycleView: "current",
   topBusinessView: "all",
@@ -845,6 +846,33 @@ async function api(path, options = {}) {
   const ct = res.headers.get("content-type") || "";
   if (ct.includes("application/json")) return res.json();
   return res;
+}
+
+function filenameFromDisposition(disposition, fallbackName) {
+  const text = String(disposition || "");
+  const utf8Match = text.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+  const match = text.match(/filename=\"?([^\";]+)\"?/i);
+  return match?.[1] || fallbackName;
+}
+
+async function downloadResponseFile(path, fallbackName) {
+  const res = await api(path);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filenameFromDisposition(res.headers.get("content-disposition"), fallbackName);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 function toTable(items) {
@@ -3508,6 +3536,52 @@ async function saveUninvoicedSortingConfig() {
   if (hint) hint.textContent = "已保存。下次下载 HTML 和 Excel 时生效。";
 }
 
+function setUninvoicedDownloadHint(message, tone = "") {
+  const hint = el("uninvoicedDownloadHint");
+  if (!hint) return;
+  hint.textContent = message;
+  hint.classList.toggle("is-success", tone === "success");
+  hint.classList.toggle("is-error", tone === "error");
+}
+
+function setUninvoicedDownloadBusy(isBusy) {
+  state.uninvoicedDownloadBusy = isBusy;
+  document.querySelectorAll("[data-uninvoiced-download]").forEach((button) => {
+    button.disabled = isBusy;
+  });
+}
+
+async function runUninvoicedAdminDownload(kind) {
+  if (state.uninvoicedDownloadBusy) return;
+
+  const targets = {
+    excel: [{ path: "/exports/uninvoiced/excel", filename: "超60天没开票.xlsx", label: "Excel" }],
+    html: [{ path: "/exports/uninvoiced/html", filename: "超60天没开票.html", label: "HTML" }],
+    all: [
+      { path: "/exports/uninvoiced/excel", filename: "超60天没开票.xlsx", label: "Excel" },
+      { path: "/exports/uninvoiced/html", filename: "超60天没开票.html", label: "HTML" },
+    ],
+  };
+  const selectedTargets = targets[kind];
+  if (!selectedTargets) return;
+
+  try {
+    setUninvoicedDownloadBusy(true);
+    setUninvoicedDownloadHint(`正在下载${kind === "all" ? "全部文件" : selectedTargets[0].label}...`);
+    for (const target of selectedTargets) {
+      await downloadResponseFile(target.path, target.filename);
+    }
+    setUninvoicedDownloadHint(
+      `已开始下载${kind === "all" ? " Excel 和 HTML" : ` ${selectedTargets[0].label}`}。`,
+      "success"
+    );
+  } catch (error) {
+    setUninvoicedDownloadHint(`下载失败：${error.message}`, "error");
+  } finally {
+    setUninvoicedDownloadBusy(false);
+  }
+}
+
 function reminderAlertTypeLabel(alertType) {
   return alertType === "ship_after_no_finance" ? "超60天没开票" : "该发没发";
 }
@@ -4216,6 +4290,9 @@ if (el("btnSaveUninvoicedSorting")) {
     saveUninvoicedSortingConfig().catch((e) => alert(e.message))
   );
 }
+document.querySelectorAll("[data-uninvoiced-download]").forEach((button) => {
+  button.addEventListener("click", () => runUninvoicedAdminDownload(button.dataset.uninvoicedDownload));
+});
 if (el("btnCustomerOverviewSearch")) {
   el("btnCustomerOverviewSearch").addEventListener("click", () =>
     refreshCustomerOverviewCustomers().catch((e) => alert(e.message))

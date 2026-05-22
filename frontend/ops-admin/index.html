@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>销售履约与开票预警 V1 - 隐藏后台</title>
-    <link rel="stylesheet" href="./styles.css?v=20260521-phase11-sorting" />
+    <link rel="stylesheet" href="./styles.css?v=20260523-phase11-admin-downloads" />
   </head>
   <body>
     <header>
@@ -133,6 +133,16 @@
         <button id="btnLoadUninvoicedSorting">读取排序配置</button>
         <button id="btnSaveUninvoicedSorting">保存排序配置（admin）</button>
         <p id="uninvoicedSortingHint" class="hint">当前还没有读取排序配置。</p>
+        <div class="uninvoiced-download-block">
+          <h3>下载超60天没开票</h3>
+          <p class="hint">这里下载的 HTML 和 Excel 使用当前正式导出口径，并共用上面的排序配置。</p>
+          <div class="uninvoiced-download-actions">
+            <button id="btnDownloadUninvoicedExcel" data-uninvoiced-download="excel">下载 Excel</button>
+            <button id="btnDownloadUninvoicedHtml" data-uninvoiced-download="html">下载 HTML</button>
+            <button id="btnDownloadUninvoicedAll" data-uninvoiced-download="all">下载全部</button>
+          </div>
+          <p id="uninvoicedDownloadHint" class="hint">下载使用上方后端地址和当前角色；保存排序配置仍需管理员。</p>
+        </div>
       </section>
 
       <section class="card">
@@ -328,6 +338,6 @@
       </section>
     </main>
 
-    <script src="./app.js?v=20260521-phase11-sorting"></script>
+    <script src="./app.js?v=20260523-phase11-admin-downloads"></script>
   </body>
 </html>
