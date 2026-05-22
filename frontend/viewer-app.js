@@ -35,6 +35,7 @@ const SEVERITY_RANK = {
   important: 1,
   hint: 2,
 };
+const UNINVOICED_THRESHOLD_DAYS = 60;
 
 const state = {
   profile: null,
@@ -60,6 +61,9 @@ const state = {
   detail: null,
   source: null,
   sourceVisible: false,
+  downloadModalOpen: false,
+  downloadChoice: "all",
+  downloadBusy: false,
   installPromptEvent: null,
   autoRefreshTimer: null,
   scrollPositions: {
@@ -258,6 +262,18 @@ function formatKnownAmount(value) {
   return formatAmount(number);
 }
 
+function outboundDaysFromOverdue(overdueDays) {
+  const number = Number(overdueDays);
+  if (!Number.isFinite(number)) return null;
+  return Math.max(number, 0) + UNINVOICED_THRESHOLD_DAYS;
+}
+
+function formatOutboundDays(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "暂无";
+  return `${trimNumber(number)} 天`;
+}
+
 function formatCustomerAmountText(total, hasMissingAmount) {
   const number = Number(total);
   if (Number.isFinite(number) && number > 0) return formatKnownAmount(number);
@@ -282,6 +298,13 @@ function parseItemLabel(item, message) {
     message.match(/产品〔([^〕]+)〕/)?.[1] ||
     "商品未写"
   );
+}
+
+function actualUninvoicedAmountFromItem(item, payload, message) {
+  if (Object.prototype.hasOwnProperty.call(item, "actual_uninvoiced_amount")) {
+    return numberFromText(item.actual_uninvoiced_amount);
+  }
+  return Number.isFinite(Number(payload.amount)) ? Number(payload.amount) : numberFromText(message.match(/金额〔([^〕]+)〕/)?.[1]);
 }
 
 function decorateAlert(item) {
@@ -332,11 +355,14 @@ function decorateAlert(item) {
     };
   }
 
-  const daysAfter = Number.isFinite(Number(payload.days_after_outbound))
-    ? Number(payload.days_after_outbound)
-    : numberFromText(message.match(/距最近出库已〔([^〕]+)〕天/)?.[1]);
+  const daysAfter = Number.isFinite(Number(item.current_days_after_outbound))
+    ? Number(item.current_days_after_outbound)
+    : Number.isFinite(Number(payload.days_after_outbound))
+      ? Number(payload.days_after_outbound)
+      : numberFromText(message.match(/距最近出库已〔([^〕]+)〕天/)?.[1]);
   const overdueBeyond = daysAfter !== null ? Math.max(daysAfter - 60, 0) : null;
-  const amount = Number.isFinite(Number(payload.amount)) ? Number(payload.amount) : numberFromText(message.match(/金额〔([^〕]+)〕/)?.[1]);
+  const outboundDaysText = formatOutboundDays(daysAfter);
+  const amount = actualUninvoicedAmountFromItem(item, payload, message);
   const uninvoicedQty = Number.isFinite(Number(payload.uninvoiced_qty))
     ? Number(payload.uninvoiced_qty)
     : numberFromText(message.match(/未开票数量〔([^〕]+)〕/)?.[1]);
@@ -353,11 +379,11 @@ function decorateAlert(item) {
     uninvoicedQty,
     bucketValue: overdueBeyond,
     displayDate: lastChangedLabel,
-    statusCallout: `已超 ${trimNumber(overdueBeyond ?? 0)} 天`,
+    statusCallout: `出库天数 ${outboundDaysText}`,
     summaryCopy: amount !== null ? `还没开 ${formatAmount(amount)}` : "金额暂缺，先催票",
     metricItems: [
       { label: "本笔未开", value: amount !== null ? formatAmount(amount) : "部分金额暂缺" },
-      { label: "已超", value: overdueBeyond !== null ? `${trimNumber(overdueBeyond)}天` : "暂无" },
+      { label: "出库天数", value: outboundDaysText },
       { label: "未开票", value: uninvoicedQty !== null ? trimNumber(uninvoicedQty) : "暂无" },
     ],
   };
@@ -377,6 +403,9 @@ function compareUnshipped(a, b) {
 }
 
 function compareUninvoiced(a, b) {
+  const aSort = Number.isFinite(Number(a.viewer_sort_index)) ? Number(a.viewer_sort_index) : null;
+  const bSort = Number.isFinite(Number(b.viewer_sort_index)) ? Number(b.viewer_sort_index) : null;
+  if (aSort !== null || bSort !== null) return (aSort ?? 999999) - (bSort ?? 999999);
   if (a.severityRank !== b.severityRank) return a.severityRank - b.severityRank;
   if ((a.amount ?? -1) !== (b.amount ?? -1)) return (b.amount ?? -1) - (a.amount ?? -1);
   if ((a.bucketValue ?? -1) !== (b.bucketValue ?? -1)) return (b.bucketValue ?? -1) - (a.bucketValue ?? -1);
@@ -502,9 +531,17 @@ function findUninvoicedCustomerSummary(customer) {
       has_missing_amount: state.customerDetail.has_missing_amount,
       overdue_max_days: state.customerDetail.overdue_max_days,
       alert_count: state.customerDetail.alert_count,
+      related_order_count: state.customerDetail.related_order_count,
     };
   }
   return null;
+}
+
+function relatedOrderCount(item) {
+  const orderCount = Number(item?.related_order_count);
+  if (Number.isFinite(orderCount)) return orderCount;
+  const alertCount = Number(item?.alert_count);
+  return Number.isFinite(alertCount) ? alertCount : 0;
 }
 
 function customerDebtSnapshot(customer) {
@@ -636,6 +673,7 @@ function renderCustomerPrimaryCard(item) {
     `;
   }
   const amountText = formatCustomerAmountText(item.known_amount_total, item.has_missing_amount);
+  const outboundDaysText = formatOutboundDays(outboundDaysFromOverdue(item.overdue_max_days));
   const summaryCopy =
     item.has_missing_amount && amountText !== "金额暂缺"
       ? `${amountText}，部分金额暂缺`
@@ -656,7 +694,7 @@ function renderCustomerPrimaryCard(item) {
           <p class="card-kicker">${escapeHtml(SECTION_LABELS.uninvoiced)}</p>
           <h2>${escapeHtml(item.customer)}</h2>
         </div>
-        <span class="status-chip status-chip--uninvoiced">最久已超 ${escapeHtml(trimNumber(item.overdue_max_days ?? 0))} 天</span>
+        <span class="status-chip status-chip--uninvoiced">出库天数 ${escapeHtml(outboundDaysText)}</span>
       </div>
       <div class="focus-card__body">
         <p class="focus-card__item">${escapeHtml(summaryCopy)}</p>
@@ -664,8 +702,8 @@ function renderCustomerPrimaryCard(item) {
       </div>
       ${renderMetricStrip([
         { label: "总未开票", value: amountText },
-        { label: "最久已超", value: item.overdue_max_days !== null ? `${trimNumber(item.overdue_max_days)}天` : "暂无" },
-        { label: "共几笔", value: trimNumber(item.alert_count || 0) },
+        { label: "出库天数", value: outboundDaysText },
+        { label: "相关订单数", value: trimNumber(relatedOrderCount(item)) },
       ])}
       <div class="card-footer">
         <div class="meta-row">
@@ -679,15 +717,25 @@ function renderCustomerPrimaryCard(item) {
   `;
 }
 
+function renderDownloadAction(section) {
+  if (section !== "uninvoiced") return "";
+  return `<button type="button" class="text-action download-action" data-action="open-download">下载</button>`;
+}
+
+function hasUninvoicedDownloadData() {
+  return baseUninvoicedCustomers("open").length > 0 || getDecoratedAlerts("open").some((item) => item.viewSection === "uninvoiced");
+}
+
 function renderQuickScreen() {
   const section = state.activeSection;
   const copy = SECTION_COPY[section];
   const remainingCount = quickRemainingCount(section);
   return `
     <section class="page-shell page-shell--quick">
-      <header class="topbar topbar--quick">
+      <header class="topbar topbar--quick ${section === "uninvoiced" ? "topbar--with-download" : ""}">
         <button type="button" class="back-link" data-action="back-to-overview">返回</button>
         <p class="topbar__title">${escapeHtml(SECTION_LABELS[section])}</p>
+        ${renderDownloadAction(section)}
       </header>
       <div class="page-intro">
         <h1 class="page-title page-title--secondary">${escapeHtml(copy.quickTitle)}</h1>
@@ -765,6 +813,7 @@ function renderListCard(item) {
 
 function renderCustomerListCard(item) {
   const amountText = formatCustomerAmountText(item.known_amount_total, item.has_missing_amount);
+  const outboundDaysText = formatOutboundDays(outboundDaysFromOverdue(item.overdue_max_days));
   const customerAction = isMobileViewport() ? "open-uninvoiced-lead-detail" : "open-customer";
   const detailLinkClass = isMobileViewport() ? "detail-link" : "detail-link detail-link--customer";
   return `
@@ -779,7 +828,7 @@ function renderCustomerListCard(item) {
           <p class="card-kicker">${escapeHtml(SECTION_LABELS.uninvoiced)}</p>
           <h3>${escapeHtml(item.customer)}</h3>
         </div>
-        <span class="status-chip status-chip--uninvoiced">最久已超 ${escapeHtml(trimNumber(item.overdue_max_days ?? 0))} 天</span>
+        <span class="status-chip status-chip--uninvoiced">出库天数 ${escapeHtml(outboundDaysText)}</span>
       </div>
       <div class="list-card__body">
         <p class="list-card__item">总未开票 ${escapeHtml(amountText)}</p>
@@ -787,8 +836,8 @@ function renderCustomerListCard(item) {
       </div>
       ${renderMetricStrip([
         { label: "总未开票", value: amountText },
-        { label: "最久已超", value: item.overdue_max_days !== null ? `${trimNumber(item.overdue_max_days)}天` : "暂无" },
-        { label: "共几笔", value: trimNumber(item.alert_count || 0) },
+        { label: "出库天数", value: outboundDaysText },
+        { label: "相关订单数", value: trimNumber(relatedOrderCount(item)) },
       ])}
       <div class="card-footer">
         <div class="meta-row">
@@ -835,9 +884,10 @@ function renderListScreen() {
   const countLabel = isUninvoicedCustomerView ? "位客户" : "条";
   return `
     <section class="page-shell page-shell--list">
-      <header class="topbar topbar--list">
+      <header class="topbar topbar--list ${section === "uninvoiced" ? "topbar--with-download" : ""}">
         <button type="button" class="back-link" data-action="back-to-quick">返回</button>
         <p class="topbar__title">${escapeHtml(isMobileViewport() ? mobileListTitle(section) : SECTION_LABELS[section])}</p>
+        ${renderDownloadAction(section)}
       </header>
       <div class="page-intro">
         <h1 class="page-title page-title--secondary">${escapeHtml(copy.listTitle)}</h1>
@@ -943,12 +993,16 @@ function detailModel(detail) {
     };
   }
 
-  const amount = numberFromText(payload.amount);
-  const daysAfter = numberFromText(payload.days_after_outbound);
+  const message = String(detail.message || payload.message_short || "");
+  const amount = actualUninvoicedAmountFromItem(detail, payload, message);
+  const daysAfter = Number.isFinite(Number(detail.current_days_after_outbound))
+    ? Number(detail.current_days_after_outbound)
+    : numberFromText(payload.days_after_outbound);
   const overdueBeyond = daysAfter !== null ? Math.max(daysAfter - 60, 0) : null;
+  const outboundDaysText = formatOutboundDays(daysAfter);
   const customerDebt = customerDebtSnapshot(detail.customer);
   const amountText = amount !== null ? formatAmount(amount) : "部分金额暂缺";
-  const headline = amount !== null ? `这笔还没开 ${amountText}，已经超了 ${trimNumber(overdueBeyond ?? 0)} 天` : `这笔还没开票，已经超了 ${trimNumber(overdueBeyond ?? 0)} 天`;
+  const headline = amount !== null ? `这笔还没开 ${amountText}，出库天数 ${outboundDaysText}` : `这笔还没开票，出库天数 ${outboundDaysText}`;
   return {
     section: "uninvoiced",
     headline,
@@ -956,7 +1010,7 @@ function detailModel(detail) {
     supportNote: customerDebt.hasMissing ? "客户总额里还有部分金额暂缺。": "",
     metrics: [
       { label: "本笔未开", value: amountText },
-      { label: "已超", value: overdueBeyond !== null ? `${trimNumber(overdueBeyond)}天` : "暂无" },
+      { label: "出库天数", value: outboundDaysText },
       { label: "客户共欠", value: customerDebt.text },
     ],
     infoFields: [
@@ -972,7 +1026,7 @@ function detailModel(detail) {
       { label: "货品", value: payload.item_name || detail.item_name || payload.item_code || detail.item_code || "暂无" },
       { label: "本笔未开", value: amountText, tone: "danger", emphasis: true },
       { label: "客户共欠", value: customerDebt.text, emphasis: true },
-      { label: "已超", value: overdueBeyond !== null ? `${trimNumber(overdueBeyond)} 天` : "暂无", tone: overdueBeyond !== null ? "danger" : "" },
+      { label: "出库天数", value: outboundDaysText, tone: daysAfter !== null ? "danger" : "" },
       { label: "未开票数量", value: payload.uninvoiced_qty !== undefined ? trimNumber(payload.uninvoiced_qty) : "暂无" },
       { label: "最近出库", value: payload.latest_outbound_date || "暂无" },
       { label: "订单号", value: payload.customer_order_no || detail.customer_order_no || "暂无" },
@@ -1027,13 +1081,14 @@ function renderMobileDetailRows(rows, options = {}) {
 
 function renderCustomerMobileOrderCard(item) {
   const amountText = item.amount !== null ? formatAmount(item.amount) : "金额暂缺";
+  const outboundDaysText = formatOutboundDays(item.daysAfter);
   return `
     <button type="button" class="detail-sheet detail-sheet--order-card has-heading has-footer" data-action="open-detail" data-alert-id="${escapeHtml(item.id)}">
       <div class="detail-sheet__heading detail-sheet__heading--order">${escapeHtml(item.itemLabel)}</div>
       ${renderMobileDetailRowsMarkup([
         { label: "本笔未开", value: amountText, emphasis: true, tone: item.amount !== null ? "danger" : "" },
         { label: "未开票数", value: item.uninvoicedQty !== null ? trimNumber(item.uninvoicedQty) : "暂无" },
-        { label: "已超", value: item.overdueBeyond !== null ? `${trimNumber(item.overdueBeyond)} 天` : "暂无", tone: item.overdueBeyond !== null ? "danger" : "" },
+        { label: "出库天数", value: outboundDaysText, tone: item.daysAfter !== null ? "danger" : "" },
         { label: "订单号", value: item.docNo || "暂无" },
         { label: "日期", value: item.displayDate || "暂无" },
       ])}
@@ -1116,7 +1171,8 @@ function renderCustomerScreen() {
 
   const detail = state.customerDetail;
   const amountText = formatCustomerAmountText(detail.known_amount_total, detail.has_missing_amount);
-  const items = Array.isArray(detail.items) ? detail.items.map(decorateAlert).sort(compareUninvoiced) : [];
+  const outboundDaysText = formatOutboundDays(outboundDaysFromOverdue(detail.overdue_max_days));
+  const items = Array.isArray(detail.items) ? detail.items.map(decorateAlert) : [];
   if (isMobileViewport()) {
     return `
       <section class="page-shell page-shell--detail page-shell--customer">
@@ -1127,8 +1183,8 @@ function renderCustomerScreen() {
 
         ${renderMobileDetailRows([
           { label: "总未开票", value: amountText, tone: "danger", emphasis: true },
-          { label: "最久已超", value: detail.overdue_max_days !== null ? `${trimNumber(detail.overdue_max_days)} 天` : "暂无", tone: detail.overdue_max_days !== null ? "danger" : "" },
-          { label: "共几笔", value: `${trimNumber(detail.alert_count || 0)} 笔` },
+          { label: "出库天数", value: outboundDaysText, tone: detail.overdue_max_days !== null ? "danger" : "" },
+          { label: "相关订单数", value: `${trimNumber(relatedOrderCount(detail))} 笔` },
           { label: "最近变化", value: fmtTime(detail.latest_changed_at) || "暂无" },
         ], { title: detail.customer || "暂无", titleClass: "detail-sheet__heading--customer" })}
 
@@ -1148,14 +1204,14 @@ function renderCustomerScreen() {
       <p class="page-kicker">${escapeHtml(SECTION_LABELS.uninvoiced)}</p>
       <div class="detail-hero">
         <h1 class="page-title page-title--secondary">${escapeHtml(detail.customer)}｜${escapeHtml(amountText)}</h1>
-        <p class="page-subtitle">最久已超 ${escapeHtml(trimNumber(detail.overdue_max_days ?? 0))} 天｜共 ${escapeHtml(trimNumber(detail.alert_count || 0))} 笔</p>
+        <p class="page-subtitle">出库天数 ${escapeHtml(outboundDaysText)}｜相关订单 ${escapeHtml(trimNumber(relatedOrderCount(detail)))} 笔</p>
         ${detail.has_missing_amount ? '<p class="detail-note">这个客户里还有部分金额暂缺，但仍已参与排行。</p>' : ""}
       </div>
 
       ${renderMetricStrip([
         { label: "总未开票", value: amountText },
-        { label: "最久已超", value: detail.overdue_max_days !== null ? `${trimNumber(detail.overdue_max_days)}天` : "暂无" },
-        { label: "共几笔", value: trimNumber(detail.alert_count || 0) },
+        { label: "出库天数", value: outboundDaysText },
+        { label: "相关订单数", value: trimNumber(relatedOrderCount(detail)) },
       ])}
 
       <div class="list-stack">
@@ -1275,6 +1331,48 @@ function renderAiScreen() {
   `;
 }
 
+function renderDownloadModal() {
+  if (!state.downloadModalOpen) return "";
+  const options = [
+    { id: "excel", label: "Excel" },
+    { id: "html", label: "HTML" },
+    { id: "all", label: "全部" },
+  ];
+  return `
+    <div class="download-backdrop" data-action="close-download">
+      <section class="download-modal" role="dialog" aria-modal="true" aria-labelledby="downloadTitle" data-action="download-dialog">
+        <div class="download-modal__head">
+          <h2 id="downloadTitle">下载</h2>
+          <button type="button" class="text-action" data-action="close-download">关闭</button>
+        </div>
+        <div class="download-choice-grid">
+          ${options
+            .map(
+              (option) => `
+                <button
+                  type="button"
+                  class="download-choice ${state.downloadChoice === option.id ? "is-active" : ""}"
+                  data-action="choose-download"
+                  data-download-kind="${escapeHtml(option.id)}"
+                  ${state.downloadBusy ? "disabled" : ""}
+                >
+                  ${escapeHtml(option.label)}
+                </button>
+              `
+            )
+            .join("")}
+        </div>
+        <div class="download-modal__actions">
+          <button type="button" class="ghost-button" data-action="close-download" ${state.downloadBusy ? "disabled" : ""}>取消</button>
+          <button type="button" class="primary-button" data-action="run-download" ${state.downloadBusy ? "disabled" : ""}>
+            ${state.downloadBusy ? "下载中" : "下载"}
+          </button>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
 function renderApp() {
   const root = byId("viewerRoot");
   const floatingAi = byId("floatingAiButton");
@@ -1293,6 +1391,7 @@ function renderApp() {
   } else {
     root.innerHTML = renderOverviewScreen();
   }
+  root.insertAdjacentHTML("beforeend", renderDownloadModal());
 
   floatingAi.hidden = state.currentScreen === "ai";
 }
@@ -1396,6 +1495,56 @@ async function loadCustomerDetail(customer) {
     bucket: state.filters.uninvoiced.bucket || "all",
   });
   return request(`/viewer/uninvoiced/customer-detail?${query.toString()}`);
+}
+
+function filenameFromDisposition(disposition, fallbackName) {
+  const text = String(disposition || "");
+  const utf8Match = text.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+  const match = text.match(/filename="?([^";]+)"?/i);
+  return match?.[1] || fallbackName;
+}
+
+async function downloadBlob(path, fallbackName) {
+  const response = await request(path, { headers: { "X-Role": "upload" } });
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filenameFromDisposition(response.headers.get("content-disposition"), fallbackName);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function runUninvoicedDownload() {
+  if (state.downloadBusy) return;
+  showMessage("appError", "");
+  state.downloadBusy = true;
+  renderApp();
+  try {
+    const choice = state.downloadChoice || "all";
+    if (choice === "excel" || choice === "all") {
+      await downloadBlob("/exports/uninvoiced/excel", "超60天没开票.xlsx");
+    }
+    if (choice === "html" || choice === "all") {
+      await downloadBlob("/exports/uninvoiced/html", "超60天没开票.html");
+    }
+    state.downloadModalOpen = false;
+    showMessage("appError", "已开始下载。", "success");
+  } catch (error) {
+    showMessage("appError", error.message);
+  } finally {
+    state.downloadBusy = false;
+    renderApp();
+  }
 }
 
 function screenContext() {
@@ -1524,7 +1673,7 @@ async function openDetail(alertId, { markRead = true } = {}) {
 
 async function openLeadUninvoicedDetail(customer) {
   const detail = await loadCustomerDetail(customer);
-  const items = Array.isArray(detail.items) ? detail.items.map(decorateAlert).sort(compareUninvoiced) : [];
+  const items = Array.isArray(detail.items) ? detail.items.map(decorateAlert) : [];
   const target = items[0];
   if (!target?.id) {
     throw new Error("这个客户当前没有可查看的单子。");
@@ -1703,6 +1852,38 @@ function bindAppInteractions() {
     }
     if (action === "logout") {
       logoutViewer().catch(() => {});
+      return;
+    }
+    if (action === "open-download") {
+      if (!hasUninvoicedDownloadData()) {
+        showMessage("appError", "当前没有超60天没开票数据");
+        return;
+      }
+      state.downloadModalOpen = true;
+      state.downloadChoice = state.downloadChoice || "all";
+      renderApp();
+      return;
+    }
+    if (action === "download-dialog") {
+      return;
+    }
+    if (action === "close-download") {
+      if (!state.downloadBusy) {
+        state.downloadModalOpen = false;
+        renderApp();
+      }
+      return;
+    }
+    if (action === "choose-download") {
+      const kind = actionNode.dataset.downloadKind;
+      if (kind === "excel" || kind === "html" || kind === "all") {
+        state.downloadChoice = kind;
+        renderApp();
+      }
+      return;
+    }
+    if (action === "run-download") {
+      runUninvoicedDownload().catch((error) => showMessage("appError", error.message));
       return;
     }
     if (action === "open-quick") {

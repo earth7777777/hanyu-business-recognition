@@ -185,14 +185,16 @@ def test_order_excel_amount_aliases_capture_amount():
     job_id = _create_job(headers)
 
     csv_content = (
-        "客户,单据编号,分录行号,商品名称,商品编码,数量,单据日期,预计交货日期,价税合计,成交金额\n"
-        "安吉热威,DOC-AMOUNT-001,1,压板,0101-HIT-8.5S3338-1,150,2025-04-21,2025-04-21,103.5,103.5\n"
+        "客户,单据编号,分录行号,商品名称,商品编码,数量,单据日期,预计交货日期,价税合计,成交金额,含税单价\n"
+        "安吉热威,DOC-AMOUNT-001,1,压板,0101-HIT-8.5S3338-1,150,2025-04-21,2025-04-21,103.5,9999,0.69\n"
     )
     file_id = _upload_order_csv(job_id, csv_content, headers)
     payload = _first_payload(file_id)
     core = payload.get("core") or {}
 
     assert core.get("amount") == 103.5
+    assert core.get("order_total_amount") == 9999
+    assert core.get("tax_inclusive_unit_price") == 0.69
 
 
 def test_init_db_backfills_order_amount_aliases_for_existing_field_mappings():
@@ -201,7 +203,8 @@ def test_init_db_backfills_order_amount_aliases_for_existing_field_mappings():
         assert item is not None
         current = dict(item.value_json or {})
         order_map = dict(current.get("order") or {})
-        order_map["amount"] = ["金额", "amount"]
+        order_map["amount"] = ["成交金额", "金额", "amount"]
+        order_map.pop("order_total_amount", None)
         current["order"] = order_map
         item.value_json = current
         db.commit()
@@ -213,8 +216,14 @@ def test_init_db_backfills_order_amount_aliases_for_existing_field_mappings():
         assert item is not None
         order_map = dict((item.value_json or {}).get("order") or {})
         aliases = order_map.get("amount") or []
+        assert aliases[:3] == ["价税合计", "金额", "amount"]
         assert "价税合计" in aliases
-        assert "成交金额" in aliases
+        assert "成交金额" not in aliases
+        order_total_aliases = order_map.get("order_total_amount") or []
+        assert order_total_aliases[0] == "成交金额"
+        assert "成交金额" in order_total_aliases
+        unit_price_aliases = order_map.get("tax_inclusive_unit_price") or []
+        assert "含税单价" in unit_price_aliases
 
 
 def test_init_db_backfills_order_outbound_status_aliases_for_existing_field_mappings():

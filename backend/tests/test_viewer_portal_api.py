@@ -131,6 +131,77 @@ def _create_viewer_mix_job_with_unique_orders(suffix: str) -> str:
     return job_id
 
 
+def _create_viewer_same_order_lines_job(suffix: str) -> str:
+    headers = {"X-Role": "admin"}
+    create_resp = client.post("/v1/upload-jobs", headers=headers)
+    assert create_resp.status_code == 200
+    job_id = create_resp.json()["id"]
+
+    outbound_95 = (date.today() - timedelta(days=95)).isoformat()
+    csv_content = (
+        "客户,客户订单号,分录行号,料号,品名,数量,金额,订单日期,交期,出库状态,行出库状态,最近出库日期,行已执行已出库数量,行已开票数量,行未开票数量\n"
+        f"同单客户{suffix},SO-VIEW-{suffix}-SAME,1,ITEM-SAME-1,同单产品1,100,1000,2026-01-05,2026-01-20,全部出库,全部出库,{outbound_95},100,0,100\n"
+        f"同单客户{suffix},SO-VIEW-{suffix}-SAME,2,ITEM-SAME-2,同单产品2,50,500,2026-01-05,2026-01-20,全部出库,全部出库,{outbound_95},50,0,50\n"
+    )
+    upload_resp = client.post(
+        f"/v1/upload-jobs/{job_id}/files",
+        headers=headers,
+        data={"document_type": "order"},
+        files={"upload": (f"viewer-same-order-{suffix}.csv", io.BytesIO(csv_content.encode("utf-8")), "text/csv")},
+    )
+    assert upload_resp.status_code == 200
+
+    task_resp = client.post("/v1/tasks/orchestrate", headers=headers, json={"job_id": job_id})
+    assert task_resp.status_code == 200
+    task_id = task_resp.json()["id"]
+    for _ in range(20):
+        info = client.get(f"/v1/tasks/{task_id}", headers=headers)
+        assert info.status_code == 200
+        status = info.json()["status"]
+        if status in {"succeeded", "failed"}:
+            break
+        time.sleep(0.1)
+    assert status == "succeeded"
+    return job_id
+
+
+def _create_viewer_sorting_job(suffix: str) -> str:
+    headers = {"X-Role": "admin"}
+    create_resp = client.post("/v1/upload-jobs", headers=headers)
+    assert create_resp.status_code == 200
+    job_id = create_resp.json()["id"]
+
+    outbound_95 = (date.today() - timedelta(days=95)).isoformat()
+    csv_content = (
+        "客户,客户订单号,分录行号,料号,品名,数量,金额,订单日期,交期,出库状态,行出库状态,最近出库日期,行已执行已出库数量,行已开票数量,行未开票数量\n"
+        f"客户排序巨星A{suffix},SO-VIEW-{suffix}-SORT-A,1,ITEM-SORT-A,排序产品A,100,1000,2026-01-05,2026-01-20,全部出库,全部出库,{outbound_95},100,0,100\n"
+        f"客户排序普通{suffix},SO-VIEW-{suffix}-SORT-C,1,ITEM-SORT-C,排序产品C,50,500,2026-01-05,2026-01-20,全部出库,全部出库,{outbound_95},50,0,50\n"
+        f"客户排序巨星B{suffix},SO-VIEW-{suffix}-SORT-B,1,ITEM-SORT-B,排序产品B,10,100,2026-01-05,2026-01-20,全部出库,全部出库,{outbound_95},10,0,10\n"
+        f"订单排序客户{suffix},SO-VIEW-{suffix}-DETAIL-OLD,1,ITEM-DETAIL-OLD,旧单产品,100,1000,2026-01-05,2026-01-20,全部出库,全部出库,{outbound_95},100,0,100\n"
+        f"订单排序客户{suffix},SO-VIEW-{suffix}-DETAIL-NEW,1,ITEM-DETAIL-NEW,新单产品,10,100,2026-02-05,2026-02-20,全部出库,全部出库,{outbound_95},10,0,10\n"
+    )
+    upload_resp = client.post(
+        f"/v1/upload-jobs/{job_id}/files",
+        headers=headers,
+        data={"document_type": "order"},
+        files={"upload": (f"viewer-sorting-{suffix}.csv", io.BytesIO(csv_content.encode("utf-8")), "text/csv")},
+    )
+    assert upload_resp.status_code == 200
+
+    task_resp = client.post("/v1/tasks/orchestrate", headers=headers, json={"job_id": job_id})
+    assert task_resp.status_code == 200
+    task_id = task_resp.json()["id"]
+    for _ in range(20):
+        info = client.get(f"/v1/tasks/{task_id}", headers=headers)
+        assert info.status_code == 200
+        status = info.json()["status"]
+        if status in {"succeeded", "failed"}:
+            break
+        time.sleep(0.1)
+    assert status == "succeeded"
+    return job_id
+
+
 def test_viewer_portal_login_alerts_and_read_flow():
     headers = {"X-Role": "admin"}
     job_id = _create_due_alert_job()
@@ -284,6 +355,7 @@ def test_viewer_uninvoiced_customer_ranking_and_reminder_switch():
     assert len(customers) >= 3
     assert customers[0]["customer"] == f"A客户{suffix}"
     assert customers[0]["alert_count"] == 2
+    assert customers[0]["related_order_count"] == 2
     assert customers[0]["has_missing_amount"] is True
     assert customers[0]["known_amount_total"] >= 52000
 
@@ -294,9 +366,10 @@ def test_viewer_uninvoiced_customer_ranking_and_reminder_switch():
     assert customer_detail.status_code == 200
     detail_payload = customer_detail.json()
     assert detail_payload["alert_count"] == 2
+    assert detail_payload["related_order_count"] == 2
     assert [item["customer_order_no"] for item in detail_payload["items"]] == [
-        f"SO-VIEW-{suffix}-INV-A1",
         f"SO-VIEW-{suffix}-INV-A2",
+        f"SO-VIEW-{suffix}-INV-A1",
     ]
 
     settings_before = client.get("/v1/admin/viewer-reminder-settings", headers=headers)
@@ -381,6 +454,286 @@ def test_viewer_uninvoiced_customer_ranking_and_reminder_switch():
     overview_after_enable = client.get("/v1/viewer/overview")
     assert overview_after_enable.status_code == 200
     assert overview_after_enable.json()["open_uninvoiced_count"] == before_open_uninvoiced_count
+
+
+def test_viewer_uninvoiced_related_order_count_counts_orders_not_product_lines():
+    headers = {"X-Role": "admin"}
+    suffix = str(time.time_ns())[-6:]
+    customer = f"同单客户{suffix}"
+    _create_viewer_same_order_lines_job(suffix)
+
+    phone = _unique_phone(35)
+    create_account = client.post(
+        "/v1/admin/viewer-accounts",
+        headers=headers,
+        json={
+            "phone": phone,
+            "display_name": "老板娘",
+            "role": "viewer_boss",
+            "password": "viewer-pass-order-count",
+        },
+    )
+    assert create_account.status_code == 200
+    login_resp = client.post(
+        "/v1/viewer/auth/login",
+        json={"phone": phone, "password": "viewer-pass-order-count"},
+    )
+    assert login_resp.status_code == 200
+
+    customers_resp = client.get(
+        "/v1/viewer/uninvoiced/customers",
+        params={"state": "open", "customer": customer},
+    )
+    assert customers_resp.status_code == 200
+    customers = customers_resp.json()
+    assert len(customers) == 1
+    assert customers[0]["alert_count"] == 2
+    assert customers[0]["related_order_count"] == 1
+    assert customers[0]["known_amount_total"] == 1500.0
+
+    customer_detail = client.get(
+        "/v1/viewer/uninvoiced/customer-detail",
+        params={"customer": customer, "state": "open"},
+    )
+    assert customer_detail.status_code == 200
+    detail_payload = customer_detail.json()
+    assert detail_payload["alert_count"] == 2
+    assert detail_payload["related_order_count"] == 1
+    assert [item["customer_order_no"] for item in detail_payload["items"]] == [
+        f"SO-VIEW-{suffix}-SAME",
+        f"SO-VIEW-{suffix}-SAME",
+    ]
+
+
+def test_viewer_uninvoiced_days_recalculate_from_latest_outbound_date():
+    headers = {"X-Role": "admin"}
+    suffix = str(time.time_ns())[-6:]
+    customer = f"同单客户{suffix}"
+    _create_viewer_same_order_lines_job(suffix)
+
+    with SessionLocal() as db:
+        target_alerts = [
+            alert
+            for alert in db.query(Alert).filter(Alert.alert_type == "ship_after_no_finance").all()
+            if isinstance(alert.payload_json, dict)
+            and alert.payload_json.get("customer_order_no") == f"SO-VIEW-{suffix}-SAME"
+        ]
+        assert len(target_alerts) == 2
+        for alert in target_alerts:
+            payload = dict(alert.payload_json)
+            payload["days_after_outbound"] = 94
+            alert.payload_json = payload
+        db.commit()
+
+    phone = _unique_phone(37)
+    create_account = client.post(
+        "/v1/admin/viewer-accounts",
+        headers=headers,
+        json={
+            "phone": phone,
+            "display_name": "老板娘",
+            "role": "viewer_boss",
+            "password": "viewer-pass-days",
+        },
+    )
+    assert create_account.status_code == 200
+    login_resp = client.post(
+        "/v1/viewer/auth/login",
+        json={"phone": phone, "password": "viewer-pass-days"},
+    )
+    assert login_resp.status_code == 200
+
+    customers_resp = client.get(
+        "/v1/viewer/uninvoiced/customers",
+        params={"state": "open", "customer": customer},
+    )
+    assert customers_resp.status_code == 200
+    assert customers_resp.json()[0]["overdue_max_days"] == 35
+
+    customer_detail = client.get(
+        "/v1/viewer/uninvoiced/customer-detail",
+        params={"customer": customer, "state": "open"},
+    )
+    assert customer_detail.status_code == 200
+    detail_payload = customer_detail.json()
+    assert detail_payload["overdue_max_days"] == 35
+    assert {item["current_days_after_outbound"] for item in detail_payload["items"]} == {95}
+
+    order_alerts = client.get(
+        "/v1/viewer/alerts",
+        params={"tab": "uninvoiced", "state": "open", "customer": customer},
+    )
+    assert order_alerts.status_code == 200
+    assert {item["current_days_after_outbound"] for item in order_alerts.json()} == {95}
+
+    detail_resp = client.get(f"/v1/viewer/alerts/{order_alerts.json()[0]['id']}")
+    assert detail_resp.status_code == 200
+    assert detail_resp.json()["current_days_after_outbound"] == 95
+
+
+def test_viewer_uninvoiced_customer_and_detail_order_follow_export_sorting():
+    headers = {"X-Role": "admin"}
+    suffix = str(time.time_ns())[-6:]
+    _create_viewer_sorting_job(suffix)
+
+    phone = _unique_phone(36)
+    create_account = client.post(
+        "/v1/admin/viewer-accounts",
+        headers=headers,
+        json={
+            "phone": phone,
+            "display_name": "老板娘",
+            "role": "viewer_boss",
+            "password": "viewer-pass-sorting",
+        },
+    )
+    assert create_account.status_code == 200
+    login_resp = client.post(
+        "/v1/viewer/auth/login",
+        json={"phone": phone, "password": "viewer-pass-sorting"},
+    )
+    assert login_resp.status_code == 200
+
+    customers_resp = client.get(
+        "/v1/viewer/uninvoiced/customers",
+        params={"state": "open", "customer": "客户排序"},
+    )
+    assert customers_resp.status_code == 200
+    assert [item["customer"] for item in customers_resp.json()] == [
+        f"客户排序巨星A{suffix}",
+        f"客户排序巨星B{suffix}",
+        f"客户排序普通{suffix}",
+    ]
+
+    detail_resp = client.get(
+        "/v1/viewer/uninvoiced/customer-detail",
+        params={"customer": f"订单排序客户{suffix}", "state": "open"},
+    )
+    assert detail_resp.status_code == 200
+    assert [item["customer_order_no"] for item in detail_resp.json()["items"]] == [
+        f"SO-VIEW-{suffix}-DETAIL-NEW",
+        f"SO-VIEW-{suffix}-DETAIL-OLD",
+    ]
+
+    order_view_customers = client.get(
+        "/v1/viewer/alerts",
+        params={"tab": "uninvoiced", "state": "open", "customer": "客户排序"},
+    )
+    assert order_view_customers.status_code == 200
+    order_view_customer_items = [
+        item for item in order_view_customers.json() if str(item["customer"]).endswith(suffix)
+    ]
+    assert [item["customer"] for item in order_view_customer_items] == [
+        f"客户排序巨星A{suffix}",
+        f"客户排序巨星B{suffix}",
+        f"客户排序普通{suffix}",
+    ]
+    assert [item["viewer_sort_index"] for item in order_view_customer_items] == sorted(
+        item["viewer_sort_index"] for item in order_view_customer_items
+    )
+
+    order_view_detail = client.get(
+        "/v1/viewer/alerts",
+        params={"tab": "uninvoiced", "state": "open", "customer": f"订单排序客户{suffix}"},
+    )
+    assert order_view_detail.status_code == 200
+    assert [item["customer_order_no"] for item in order_view_detail.json()] == [
+        f"SO-VIEW-{suffix}-DETAIL-NEW",
+        f"SO-VIEW-{suffix}-DETAIL-OLD",
+    ]
+
+
+def test_viewer_uninvoiced_customer_amount_uses_actual_uninvoiced_amount():
+    headers = {"X-Role": "admin"}
+    suffix = str(time.time_ns())[-6:]
+    customer = f"口径客户{suffix}"
+    create_resp = client.post("/v1/upload-jobs", headers=headers)
+    assert create_resp.status_code == 200
+    job_id = create_resp.json()["id"]
+
+    outbound = (date.today() - timedelta(days=95)).isoformat()
+    csv_content = (
+        "客户,客户订单号,分录行号,料号,品名,数量,价税合计,含税单价,订单日期,交期,出库状态,行出库状态,最近出库日期,行已执行已出库数量,行已开票数量,行未开票数量\n"
+        f"{customer},SO-VIEW-{suffix}-PARTIAL,1,ITEM-PART,部分开票产品,100,1000,10,2026-01-05,2026-01-20,全部出库,全部出库,{outbound},100,90,10\n"
+    )
+    upload_resp = client.post(
+        f"/v1/upload-jobs/{job_id}/files",
+        headers=headers,
+        data={"document_type": "order"},
+        files={"upload": (f"viewer-amount-{suffix}.csv", io.BytesIO(csv_content.encode("utf-8")), "text/csv")},
+    )
+    assert upload_resp.status_code == 200
+
+    task_resp = client.post("/v1/tasks/orchestrate", headers=headers, json={"job_id": job_id})
+    assert task_resp.status_code == 200
+    task_id = task_resp.json()["id"]
+    for _ in range(20):
+        info = client.get(f"/v1/tasks/{task_id}", headers=headers)
+        assert info.status_code == 200
+        status = info.json()["status"]
+        if status in {"succeeded", "failed"}:
+            break
+        time.sleep(0.1)
+    assert status == "succeeded"
+
+    phone = _unique_phone(34)
+    create_account = client.post(
+        "/v1/admin/viewer-accounts",
+        headers=headers,
+        json={
+            "phone": phone,
+            "display_name": "老板娘",
+            "role": "viewer_boss",
+            "password": "viewer-pass-amount",
+        },
+    )
+    assert create_account.status_code == 200
+    login_resp = client.post(
+        "/v1/viewer/auth/login",
+        json={"phone": phone, "password": "viewer-pass-amount"},
+    )
+    assert login_resp.status_code == 200
+
+    customers_resp = client.get(
+        "/v1/viewer/uninvoiced/customers",
+        params={"state": "open", "customer": customer},
+    )
+    assert customers_resp.status_code == 200
+    customers = customers_resp.json()
+    assert len(customers) == 1
+    assert customers[0]["known_amount_total"] == 100.0
+
+    customer_detail_resp = client.get(
+        "/v1/viewer/uninvoiced/customer-detail",
+        params={"state": "open", "customer": customer},
+    )
+    assert customer_detail_resp.status_code == 200
+    customer_detail = customer_detail_resp.json()
+    assert len(customer_detail["items"]) == 1
+    assert customer_detail["items"][0]["actual_uninvoiced_amount"] == 100.0
+
+    alerts_resp = client.get(
+        "/v1/viewer/alerts",
+        params={"tab": "uninvoiced", "state": "open", "customer": customer},
+    )
+    assert alerts_resp.status_code == 200
+    alerts = alerts_resp.json()
+    assert len(alerts) == 1
+    assert alerts[0]["actual_uninvoiced_amount"] == 100.0
+
+    detail_resp = client.get(f"/v1/viewer/alerts/{alerts[0]['id']}")
+    assert detail_resp.status_code == 200
+    detail = detail_resp.json()
+    assert detail["actual_uninvoiced_amount"] == 100.0
+    assert detail["payload"]["amount"] == 1000.0
+
+    admin_resp = client.get(
+        "/v1/admin/customer-overview/customers",
+        headers=headers,
+        params={"keyword": customer},
+    )
+    assert admin_resp.status_code == 200
+    assert admin_resp.json()[0]["known_uninvoiced_amount_total"] == 100.0
 
 
 def test_admin_customer_overview_summary_and_detail():
@@ -494,6 +847,7 @@ def test_viewer_and_admin_uninvoiced_views_dedupe_internal_placeholder_duplicate
     customers = customers_resp.json()
     target_customer = next(item for item in customers if item["customer"] == f"A客户{suffix}")
     assert target_customer["alert_count"] == 2
+    assert target_customer["related_order_count"] == 2
     assert target_customer["known_amount_total"] == 52000.0
 
     customer_detail = client.get(
@@ -503,10 +857,11 @@ def test_viewer_and_admin_uninvoiced_views_dedupe_internal_placeholder_duplicate
     assert customer_detail.status_code == 200
     detail_payload = customer_detail.json()
     assert detail_payload["alert_count"] == 2
+    assert detail_payload["related_order_count"] == 2
     assert detail_payload["known_amount_total"] == 52000.0
     assert [item["customer_order_no"] for item in detail_payload["items"]] == [
-        f"SO-VIEW-{suffix}-INV-A1",
         f"SO-VIEW-{suffix}-INV-A2",
+        f"SO-VIEW-{suffix}-INV-A1",
     ]
 
     customers_admin = client.get(

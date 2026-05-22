@@ -213,6 +213,8 @@ def _build_line_candidate(rec: RecordView) -> dict[str, Any]:
         "item_name": core.get("item_name"),
         "quantity": _to_float(core.get("quantity")),
         "amount": _to_float(core.get("amount")),
+        "order_total_amount": _to_float(core.get("order_total_amount")),
+        "tax_inclusive_unit_price": _to_float(core.get("tax_inclusive_unit_price")),
         "due_date": due_date.isoformat() if due_date else None,
         "executed_shipped_qty": _to_float(core.get("executed_shipped_qty")),
         "latest_outbound_date": latest_outbound_date.isoformat() if latest_outbound_date else None,
@@ -398,6 +400,7 @@ def _aggregate(records: list[RecordView]) -> dict[str, Any]:
     winner_ext = winner.ext if winner else {}
     quantity = _to_float(winner_core.get("quantity"))
     amount = _to_float(winner_core.get("amount"))
+    tax_inclusive_unit_price = _to_float(winner_core.get("tax_inclusive_unit_price"))
     executed_shipped_qty = _to_float(winner_core.get("executed_shipped_qty"))
     invoiced_qty = _to_float(winner_core.get("invoiced_qty"))
     uninvoiced_qty = _to_float(winner_core.get("uninvoiced_qty"))
@@ -410,6 +413,7 @@ def _aggregate(records: list[RecordView]) -> dict[str, Any]:
         "entry_line_no": winner_core.get("entry_line_no"),
         "quantity": quantity,
         "amount": amount,
+        "tax_inclusive_unit_price": tax_inclusive_unit_price,
         "due_date": winner_due_date.isoformat() if winner_due_date else due_date.isoformat() if due_date else None,
         "executed_shipped_qty": executed_shipped_qty,
         "latest_outbound_date": latest_outbound_date.isoformat() if latest_outbound_date else None,

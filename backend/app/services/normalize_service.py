@@ -6,7 +6,7 @@ from typing import Any
 from dateutil import parser as dt_parser
 
 
-NUMERIC_FIELDS = {"quantity", "amount"}
+NUMERIC_FIELDS = {"quantity", "amount", "order_total_amount", "tax_inclusive_unit_price"}
 DATE_FIELDS = {"biz_date", "due_date", "ship_date", "notice_date", "invoice_date"}
 
 _CLOSED_TRUE = {"1", "true", "yes", "y", "是", "已关闭", "关闭", "closed", "close"}
@@ -22,6 +22,7 @@ _ORDER_SIGNAL_FIELDS = (
     "due_date",
     "quantity",
     "amount",
+    "order_total_amount",
     "latest_outbound_date",
     "order_outbound_status",
     "line_outbound_status",
@@ -297,6 +298,8 @@ def normalize_record(
         "item_name": parsed_row.get("item_name"),
         "quantity": _to_float(parsed_row.get("quantity")),
         "amount": _to_float(parsed_row.get("amount")),
+        "order_total_amount": _to_float(parsed_row.get("order_total_amount")),
+        "tax_inclusive_unit_price": _to_float(parsed_row.get("tax_inclusive_unit_price")),
         "biz_date": _to_date_str(parsed_row.get("biz_date")),
         "due_date": _to_date_str(parsed_row.get("due_date")),
         "ship_date": _to_date_str(parsed_row.get("ship_date")),
@@ -369,6 +372,8 @@ def normalize_record(
         ext["due_date_raw"] = parsed_row.get("due_date")
         ext["document_no_raw"] = parsed_row.get("customer_order_no")
         ext["entry_line_no_raw"] = parsed_row.get("entry_line_no")
+        ext["amount_raw"] = parsed_row.get("amount")
+        ext["order_total_amount_raw"] = parsed_row.get("order_total_amount")
         ext["order_closed_column_present"] = _column_present(source_columns, "order_closed")
         ext["line_closed_column_present"] = _column_present(source_columns, "line_closed")
         ext["order_outbound_status_column_present"] = _column_present(source_columns, "order_outbound_status")

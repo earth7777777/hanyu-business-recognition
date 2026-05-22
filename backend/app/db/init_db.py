@@ -15,6 +15,10 @@ from app.services.order_governance import (
     LIFECYCLE_SPECIAL_CASE,
     STATUS_SPECIAL_CASE,
 )
+from app.services.uninvoiced_sorting_config import (
+    DEFAULT_UNINVOICED_EXPORT_SORTING,
+    UNINVOICED_EXPORT_SORTING_CONFIG_KEY,
+)
 
 
 DEFAULTS: dict[str, dict] = {
@@ -27,7 +31,9 @@ DEFAULTS: dict[str, dict] = {
             "item_code": ["料号", "物料编码", "商品编码", "item_code"],
             "item_name": ["品名", "物料名称", "商品名称", "item_name"],
             "quantity": ["数量", "qty"],
-            "amount": ["金额", "价税合计", "成交金额", "amount"],
+            "amount": ["价税合计", "金额", "amount"],
+            "order_total_amount": ["成交金额", "订单金额", "订单总金额", "order_total_amount", "order_amount"],
+            "tax_inclusive_unit_price": ["含税单价", "tax_inclusive_unit_price", "unit_price_with_tax"],
             "biz_date": ["日期", "订单日期", "单据日期", "date"],
             "due_date": ["交期", "交货日期", "due_date", "预计交货日期", "预计交期"],
             "order_closed": ["关闭状态", "订单关闭状态", "关闭订单", "是否关闭", "closed"],
@@ -96,6 +102,7 @@ DEFAULTS: dict[str, dict] = {
         "ship_after_no_finance_days": 60,
         "ship_after_no_finance_require_order_fully_outbound": False,
     },
+    UNINVOICED_EXPORT_SORTING_CONFIG_KEY: DEFAULT_UNINVOICED_EXPORT_SORTING,
     "orchestrator_profile": {
         "provider": "copaw",
         "transport": "http",
@@ -271,7 +278,9 @@ _ORDER_MAPPING_REQUIRED_KEYS: dict[str, list[str]] = {
     "entry_line_no": ["分录行号", "行号", "明细行号", "分录号", "entry_line_no"],
     "item_code": ["料号", "物料编码", "商品编码", "item_code"],
     "item_name": ["品名", "物料名称", "商品名称", "item_name"],
-    "amount": ["金额", "价税合计", "成交金额", "amount"],
+    "amount": ["价税合计", "金额", "amount"],
+    "order_total_amount": ["成交金额", "订单金额", "订单总金额", "order_total_amount", "order_amount"],
+    "tax_inclusive_unit_price": ["含税单价", "tax_inclusive_unit_price", "unit_price_with_tax"],
     "biz_date": ["日期", "订单日期", "单据日期", "date"],
     "due_date": ["交期", "交货日期", "due_date", "预计交货日期", "预计交期"],
     "order_closed": ["关闭状态", "订单关闭状态", "关闭订单", "是否关闭", "closed"],
@@ -284,6 +293,10 @@ _ORDER_MAPPING_REQUIRED_KEYS: dict[str, list[str]] = {
     "uninvoiced_qty": ["行未开票数量", "未开票数量", "待开票数量"],
     "line_invoice_status": ["行开票状态", "开票状态", "发票状态"],
 }
+_ORDER_MAPPING_DEPRECATED_ALIASES: dict[str, list[str]] = {
+    "amount": ["成交金额", "订单金额", "订单总金额", "order_total_amount", "order_amount"],
+}
+_ORDER_MAPPING_REQUIRED_ALIAS_ORDER_FIELDS = {"amount", "order_total_amount"}
 
 
 def init_db() -> None:
@@ -322,13 +335,24 @@ def _ensure_order_mapping_keys(db: Session) -> None:
             order_map[field] = list(required_aliases)
             changed = True
             continue
-        normalized_existing = {_norm_alias(x) for x in existing if str(x).strip()}
-        merged = list(existing)
-        for alias in required_aliases:
-            if _norm_alias(alias) not in normalized_existing:
-                merged.append(alias)
-                normalized_existing.add(_norm_alias(alias))
+        deprecated = {_norm_alias(x) for x in _ORDER_MAPPING_DEPRECATED_ALIASES.get(field, [])}
+        merged = [alias for alias in existing if _norm_alias(alias) not in deprecated]
+        if len(merged) != len(existing):
+            changed = True
+        normalized_existing = {_norm_alias(x) for x in merged if str(x).strip()}
+        if field in _ORDER_MAPPING_REQUIRED_ALIAS_ORDER_FIELDS:
+            prioritized = list(required_aliases)
+            normalized_prioritized = {_norm_alias(x) for x in prioritized if str(x).strip()}
+            prioritized.extend(alias for alias in merged if _norm_alias(alias) not in normalized_prioritized)
+            if prioritized != existing:
                 changed = True
+            merged = prioritized
+        else:
+            for alias in required_aliases:
+                if _norm_alias(alias) not in normalized_existing:
+                    merged.append(alias)
+                    normalized_existing.add(_norm_alias(alias))
+                    changed = True
         order_map[field] = merged
 
     if not changed:

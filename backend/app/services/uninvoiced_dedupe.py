@@ -37,6 +37,24 @@ def uninvoiced_amount_from_payload(payload: dict[str, Any], message: str) -> flo
     return None
 
 
+def actual_uninvoiced_amount_from_payload(payload: dict[str, Any], message: str = "") -> float | None:
+    uninvoiced_qty = _number_from_text(payload.get("uninvoiced_qty"))
+    if uninvoiced_qty is None:
+        return None
+    if uninvoiced_qty <= 0:
+        return 0.0
+
+    unit_price = _number_from_text(payload.get("tax_inclusive_unit_price"))
+    if unit_price is not None and not _is_zero_number(unit_price):
+        return round(float(unit_price) * float(uninvoiced_qty), 6)
+
+    line_amount = uninvoiced_amount_from_payload(payload, message)
+    line_quantity = _number_from_text(payload.get("quantity"))
+    if line_amount is None or _is_zero_number(line_amount) or line_quantity is None or line_quantity <= 0:
+        return None
+    return round(float(line_amount) * float(uninvoiced_qty) / float(line_quantity), 6)
+
+
 def is_internal_placeholder_order_no(value: Any) -> bool:
     raw = _clean_text(value).upper()
     if not raw:
@@ -97,6 +115,10 @@ def _float_key(value: float | None) -> str:
     if value is None:
         return ""
     return f"{round(float(value), 6):.6f}"
+
+
+def _is_zero_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and abs(float(value)) < 1e-9
 
 
 def _real_order_key(entry: dict[str, Any]) -> str:

@@ -289,6 +289,7 @@ label {
 .source-toggle,
 .ghost-button,
 .primary-button,
+.download-choice,
 .inline-link,
 .segment-button,
 .bucket-button,
@@ -326,6 +327,101 @@ label {
   background: rgba(255, 255, 255, 0.58);
   color: var(--ink-soft);
   border: 1px solid var(--line);
+}
+
+.topbar--with-download {
+  display: grid;
+  grid-template-columns: minmax(52px, 1fr) auto minmax(52px, 1fr);
+  align-items: center;
+}
+
+.topbar--with-download .back-link {
+  justify-self: start;
+}
+
+.topbar--with-download .topbar__title {
+  justify-self: center;
+  text-align: center;
+}
+
+.download-action {
+  justify-self: end;
+  white-space: nowrap;
+}
+
+.download-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(19, 32, 24, 0.28);
+  backdrop-filter: blur(10px);
+}
+
+.download-modal {
+  width: min(100%, 420px);
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.64);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow-lg);
+}
+
+.download-modal__head,
+.download-modal__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.download-modal__head h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.download-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.download-choice {
+  min-height: 46px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(247, 249, 245, 0.92);
+  color: var(--ink-soft);
+  font-weight: 700;
+}
+
+.download-choice.is-active {
+  border-color: rgba(79, 111, 94, 0.34);
+  background: rgba(104, 142, 120, 0.16);
+  color: var(--accent-strong);
+}
+
+.download-modal__actions {
+  margin-top: 16px;
+}
+
+.download-modal__actions .ghost-button,
+.download-modal__actions .primary-button {
+  flex: 1;
+  min-height: 46px;
+}
+
+.download-choice:disabled,
+.download-modal__actions button:disabled {
+  cursor: default;
+  opacity: 0.62;
+  transform: none;
 }
 
 .text-action {
@@ -372,6 +468,7 @@ label {
 .source-toggle:hover,
 .ghost-button:hover,
 .primary-button:hover,
+.download-choice:hover,
 .inline-link:hover,
 .segment-button:hover,
 .bucket-button:hover,
@@ -906,6 +1003,10 @@ label {
     padding: 30px;
   }
 
+  .download-backdrop {
+    align-items: center;
+  }
+
   .page-shell,
   .login-poster,
   .login-panel {
@@ -1103,6 +1204,10 @@ label {
     grid-column: 3;
   }
 
+  .page-shell--list .topbar--with-download::after {
+    content: none;
+  }
+
   .page-shell--list .back-link {
     grid-column: 1;
     justify-self: start;
@@ -1123,6 +1228,19 @@ label {
     font-weight: 700;
     letter-spacing: -0.03em;
     color: var(--ink);
+  }
+
+  .page-shell--list .download-action {
+    grid-column: 3;
+    justify-self: end;
+    min-height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--ink-soft);
+    font-size: 14px;
   }
 
   .page-shell--list .page-intro {
@@ -1452,6 +1570,10 @@ label {
     grid-column: 3;
   }
 
+  .page-shell--quick .topbar--with-download::after {
+    content: none;
+  }
+
   .page-shell--quick .back-link {
     grid-column: 1;
     justify-self: start;
@@ -1472,6 +1594,19 @@ label {
     font-weight: 700;
     letter-spacing: -0.03em;
     color: var(--ink);
+  }
+
+  .page-shell--quick .download-action {
+    grid-column: 3;
+    justify-self: end;
+    min-height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--ink-soft);
+    font-size: 14px;
   }
 
   .page-shell--quick .page-intro {

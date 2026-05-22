@@ -75,6 +75,9 @@ class ViewerAlertItem(BaseModel):
     customer_order_no: str | None = None
     item_name: str | None = None
     item_code: str | None = None
+    actual_uninvoiced_amount: float | None = None
+    current_days_after_outbound: int | None = None
+    viewer_sort_index: int | None = None
     created_at: datetime
     last_changed_at: datetime
     is_unread_change: bool
@@ -106,6 +109,7 @@ class ViewerUninvoicedCustomerItem(BaseModel):
     status: str
     status_label: str
     alert_count: int
+    related_order_count: int
     known_amount_total: float
     has_missing_amount: bool
     overdue_max_days: int | None = None
@@ -121,6 +125,7 @@ class ViewerUninvoicedCustomerDetail(BaseModel):
     status: str
     status_label: str
     alert_count: int
+    related_order_count: int
     known_amount_total: float
     has_missing_amount: bool
     overdue_max_days: int | None = None

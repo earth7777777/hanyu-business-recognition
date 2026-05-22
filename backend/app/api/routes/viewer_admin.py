@@ -44,8 +44,8 @@ from app.services.viewer_reminder_settings import (
     viewer_alert_type_label,
 )
 from app.services.uninvoiced_dedupe import (
+    actual_uninvoiced_amount_from_payload,
     dedupe_uninvoiced_entries,
-    uninvoiced_amount_from_payload,
     viewer_display_order_no,
 )
 
@@ -88,7 +88,7 @@ def _number_from_text(value: object) -> float | None:
 
 
 def _uninvoiced_amount(payload: dict, message: str) -> float | None:
-    return uninvoiced_amount_from_payload(payload, message)
+    return actual_uninvoiced_amount_from_payload(payload, message)
 
 
 def _severity_info(raw: str) -> tuple[str, str]:

@@ -19,7 +19,13 @@ def _merge_default_template(current: dict | None, default: dict | None) -> dict:
 
 def _sanitize_config_value(key: str, value: dict | None) -> dict:
     data = dict(value) if isinstance(value, dict) else {}
-    if key in {"rule_parameters", "data_retention_policy", "operations_monitoring_policy", "operations_runtime_status"}:
+    if key in {
+        "rule_parameters",
+        "data_retention_policy",
+        "operations_monitoring_policy",
+        "operations_runtime_status",
+        "uninvoiced_export_sorting",
+    }:
         data = _merge_default_template(data, DEFAULTS.get(key))
     if key == "data_retention_policy":
         data.pop("archive_recommended_after_days", None)

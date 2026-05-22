@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>销售履约与开票预警 V1 - 隐藏后台</title>
-    <link rel="stylesheet" href="./styles.css?v=20260412-phase7-ops-admin-3" />
+    <link rel="stylesheet" href="./styles.css?v=20260521-phase11-sorting" />
   </head>
   <body>
     <header>
@@ -102,6 +102,37 @@
           <h3>最近操作记录</h3>
           <div id="viewerReminderLogs"></div>
         </div>
+      </section>
+
+      <section class="card">
+        <h2>超60天没开票导出排序</h2>
+        <p class="hint">这里控制 HTML 和 Excel 的导出顺序。保存后，下次下载两个文件都会按同一套顺序排列。</p>
+        <div class="grid three">
+          <label>客户排序
+            <select id="uninvoicedCustomerSort">
+              <option value="amount_desc_with_sort_groups">按应催金额排序，排序组只负责挨着</option>
+              <option value="sort_group_priority_then_amount_desc">排序组优先，再按应催金额</option>
+              <option value="amount_desc">只按应催金额排序</option>
+            </select>
+          </label>
+          <label>客户内订单排序
+            <select id="uninvoicedOrderSort">
+              <option value="fully_outbound_then_order_date_desc_then_urgent_amount_desc">整单已发完优先 → 单据日期新到旧 → 应催金额高到低</option>
+              <option value="fully_outbound_then_urgent_amount_desc">整单已发完优先 → 应催金额高到低</option>
+            </select>
+          </label>
+          <label>订单内产品排序
+            <select id="uninvoicedProductSort">
+              <option value="kingdee_entry_line_no">金蝶原始顺序 / 分录行号</option>
+            </select>
+          </label>
+        </div>
+        <label>客户排序组（每行：优先级 | 组名 | 关键词1,关键词2）
+          <textarea id="uninvoicedCustomerSortGroups" rows="5" placeholder="1 | 巨星系 | 巨星,联合电气&#10;2 | 热威系 | 热威"></textarea>
+        </label>
+        <button id="btnLoadUninvoicedSorting">读取排序配置</button>
+        <button id="btnSaveUninvoicedSorting">保存排序配置（admin）</button>
+        <p id="uninvoicedSortingHint" class="hint">当前还没有读取排序配置。</p>
       </section>
 
       <section class="card">
@@ -297,6 +328,6 @@
       </section>
     </main>
 
-    <script src="./app.js?v=20260412-phase7-ops-admin-3"></script>
+    <script src="./app.js?v=20260521-phase11-sorting"></script>
   </body>
 </html>

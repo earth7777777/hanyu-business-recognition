@@ -7,7 +7,12 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import db_dep, role_dep
-from app.services.export_service import export_alerts_csv, export_customer_summary_csv, export_uninvoiced_html
+from app.services.export_service import (
+    export_alerts_csv,
+    export_customer_summary_csv,
+    export_uninvoiced_excel,
+    export_uninvoiced_html,
+)
 
 router = APIRouter(prefix="/exports", tags=["exports"])
 
@@ -46,5 +51,19 @@ def export_uninvoiced_html_data(db: Session = Depends(db_dep), role: str = Depen
     return Response(
         content=data,
         media_type="text/html; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/uninvoiced/excel")
+def export_uninvoiced_excel_data(db: Session = Depends(db_dep), role: str = Depends(role_dep)):
+    _ = role
+    data = export_uninvoiced_excel(db)
+    if data is None:
+        raise HTTPException(status_code=404, detail="当前没有超60天没开票数据")
+    filename = f"uninvoiced-excel-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}.xlsx"
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

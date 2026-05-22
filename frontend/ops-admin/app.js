@@ -317,6 +317,15 @@ const OUTBOUND_STATUS_LABELS = {
   partially_outbound: "部分出库",
   not_outbound: "未出库",
 };
+const UNINVOICED_SORTING_DEFAULT = {
+  customer_sort: "amount_desc_with_sort_groups",
+  customer_sort_groups: [
+    { name: "巨星系", keywords: ["巨星", "联合电气"], priority: 1 },
+    { name: "热威系", keywords: ["热威"], priority: 2 },
+  ],
+  order_sort: "fully_outbound_then_order_date_desc_then_urgent_amount_desc",
+  product_sort: "kingdee_entry_line_no",
+};
 const JOB_STATUS_ORDER = [
   "failed",
   "running",
@@ -3395,6 +3404,110 @@ async function saveConfig(key, targetId) {
   alert(`${key} 已保存`);
 }
 
+function normalizeUninvoicedSortingConfig(value) {
+  const raw = value && typeof value === "object" ? value : {};
+  const defaultConfig = UNINVOICED_SORTING_DEFAULT;
+  const rawGroups = Array.isArray(raw.customer_sort_groups)
+    ? raw.customer_sort_groups
+    : defaultConfig.customer_sort_groups;
+  const groups = rawGroups
+    .map((group, index) => {
+      const name = String(group?.name || `排序组${index + 1}`).trim();
+      const keywords = Array.isArray(group?.keywords)
+        ? group.keywords.map((keyword) => String(keyword || "").trim()).filter(Boolean)
+        : String(group?.keywords || "")
+            .split(/[,，]/)
+            .map((keyword) => keyword.trim())
+            .filter(Boolean);
+      const priority = Number.parseInt(group?.priority, 10);
+      return {
+        name,
+        keywords,
+        priority: Number.isFinite(priority) ? priority : index + 1,
+      };
+    })
+    .filter((group) => group.name && group.keywords.length);
+  return {
+    customer_sort: raw.customer_sort || defaultConfig.customer_sort,
+    customer_sort_groups: groups.length ? groups : defaultConfig.customer_sort_groups,
+    order_sort: raw.order_sort || defaultConfig.order_sort,
+    product_sort: raw.product_sort || defaultConfig.product_sort,
+  };
+}
+
+function formatUninvoicedSortGroups(groups) {
+  return (Array.isArray(groups) ? groups : [])
+    .map((group, index) => {
+      const priority = Number.isFinite(Number(group.priority)) ? Number(group.priority) : index + 1;
+      const keywords = Array.isArray(group.keywords) ? group.keywords.join(",") : String(group.keywords || "");
+      return `${priority} | ${group.name || `排序组${index + 1}`} | ${keywords}`;
+    })
+    .join("\n");
+}
+
+function parseUninvoicedSortGroups(text) {
+  return String(text || "")
+    .split(/\r?\n/)
+    .map((line, index) => {
+      const parts = line.split("|").map((part) => part.trim());
+      if (parts.length < 3) return null;
+      const priority = Number.parseInt(parts[0], 10);
+      const keywords = parts
+        .slice(2)
+        .join("|")
+        .split(/[,，]/)
+        .map((keyword) => keyword.trim())
+        .filter(Boolean);
+      if (!parts[1] || !keywords.length) return null;
+      return {
+        priority: Number.isFinite(priority) ? priority : index + 1,
+        name: parts[1],
+        keywords,
+      };
+    })
+    .filter(Boolean);
+}
+
+function applyUninvoicedSortingForm(config) {
+  const normalized = normalizeUninvoicedSortingConfig(config);
+  if (el("uninvoicedCustomerSort")) el("uninvoicedCustomerSort").value = normalized.customer_sort;
+  if (el("uninvoicedOrderSort")) el("uninvoicedOrderSort").value = normalized.order_sort;
+  if (el("uninvoicedProductSort")) el("uninvoicedProductSort").value = normalized.product_sort;
+  if (el("uninvoicedCustomerSortGroups")) {
+    el("uninvoicedCustomerSortGroups").value = formatUninvoicedSortGroups(normalized.customer_sort_groups);
+  }
+}
+
+function readUninvoicedSortingForm() {
+  const groups = parseUninvoicedSortGroups(el("uninvoicedCustomerSortGroups")?.value || "");
+  return normalizeUninvoicedSortingConfig({
+    customer_sort: el("uninvoicedCustomerSort")?.value,
+    customer_sort_groups: groups,
+    order_sort: el("uninvoicedOrderSort")?.value,
+    product_sort: el("uninvoicedProductSort")?.value,
+  });
+}
+
+async function loadUninvoicedSortingConfig() {
+  const hint = el("uninvoicedSortingHint");
+  if (hint) hint.textContent = "正在读取排序配置...";
+  const res = await api("/config/uninvoiced_export_sorting");
+  applyUninvoicedSortingForm(res.value);
+  if (hint) hint.textContent = "已读取。HTML 和 Excel 下载会共用这套排序。";
+}
+
+async function saveUninvoicedSortingConfig() {
+  const hint = el("uninvoicedSortingHint");
+  const value = readUninvoicedSortingForm();
+  if (hint) hint.textContent = "正在保存排序配置...";
+  await api("/config/uninvoiced_export_sorting", {
+    method: "PUT",
+    body: JSON.stringify({ value }),
+  });
+  applyUninvoicedSortingForm(value);
+  if (hint) hint.textContent = "已保存。下次下载 HTML 和 Excel 时生效。";
+}
+
 function reminderAlertTypeLabel(alertType) {
   return alertType === "ship_after_no_finance" ? "超60天没开票" : "该发没发";
 }
@@ -4091,6 +4204,16 @@ if (el("btnViewerAccountsRefresh")) {
 if (el("btnViewerReminderRefresh")) {
   el("btnViewerReminderRefresh").addEventListener("click", () =>
     refreshViewerReminderSettings().catch((e) => alert(e.message))
+  );
+}
+if (el("btnLoadUninvoicedSorting")) {
+  el("btnLoadUninvoicedSorting").addEventListener("click", () =>
+    loadUninvoicedSortingConfig().catch((e) => alert(e.message))
+  );
+}
+if (el("btnSaveUninvoicedSorting")) {
+  el("btnSaveUninvoicedSorting").addEventListener("click", () =>
+    saveUninvoicedSortingConfig().catch((e) => alert(e.message))
   );
 }
 if (el("btnCustomerOverviewSearch")) {
