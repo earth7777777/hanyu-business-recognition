@@ -52,6 +52,15 @@ def _upload_order_csv(job_id: str, csv_content: str, headers: dict[str, str], fi
     return upload.json()["id"]
 
 
+def _set_archive_mode(headers: dict[str, str], mode: str) -> None:
+    response = client.put(
+        "/v1/config/operations_monitoring_policy",
+        headers=headers,
+        json={"value": {"archive_mode": mode}},
+    )
+    assert response.status_code == 200
+
+
 def _order_records(order_no: str) -> list[NormalizedRecord]:
     with SessionLocal() as db:
         rows = (
@@ -408,6 +417,7 @@ def test_job_summary_uploaded_product_row_count_excludes_total_rows_and_keeps_au
 
 def test_upload_job_summary_supports_top_region_lifecycle_views():
     headers = {"X-Role": "admin"}
+    _set_archive_mode(headers, "auto")
 
     current_job_id = _create_job(headers)
     empty_job_id = _create_job(headers)
@@ -864,7 +874,7 @@ def test_operations_summary_exposes_health_backup_alert_and_archive_entry():
     assert "available_file_snapshot_label" in payload["restore_drill"]["restore_drill"]
     assert payload["restore_drill"]["restore_drill"]["connection_ready"] is True
     assert payload["restore_drill"]["restore_drill"]["connection_source"] == "primary_sqlite"
-    assert payload["archive"]["mode"] == "auto"
+    assert payload["archive"]["mode"] == "manual"
     assert payload["archive"]["candidate_record_count"] >= 0
     assert payload["archive"]["auto_archive_rule"] == "当前有效订单且发齐=数量、开齐=数量"
     assert payload["archive"]["archive_preview"]["last_status"] == "never"
@@ -1799,6 +1809,7 @@ def test_current_data_soft_delete_allows_direct_recycle_without_confirm_phrase()
 
 def test_archived_file_can_move_to_recycle_bin_without_confirm_and_restore_to_archived():
     headers = {"X-Role": "admin"}
+    _set_archive_mode(headers, "auto")
     job_id = _create_job(headers)
     order_no = f"DOC-ARCHIVE-RESTORE-{uuid4().hex[:8]}"
     csv_content = (
@@ -2157,17 +2168,17 @@ def test_manual_archive_mode_requires_preview_then_execute():
     preview = client.post("/v1/admin/operations/archive/preview", headers=headers, json={})
     assert preview.status_code == 200
     preview_payload = preview.json()
-    assert preview_payload["candidate_file_count"] == 1
-    assert preview_payload["candidate_record_count"] == 1
-    assert len(preview_payload["items"]) == 1
+    assert preview_payload["candidate_file_count"] >= 1
+    assert preview_payload["candidate_record_count"] >= 1
+    assert any(item["file_id"] == file_id for item in preview_payload["items"])
     assert preview_payload["preview_token"]
 
     runtime = client.get("/v1/config/operations_runtime_status", headers=headers)
     assert runtime.status_code == 200
     preview_block = runtime.json()["value"]["archive_preview"]
     assert preview_block["last_status"] == "succeeded"
-    assert preview_block["last_candidate_file_count"] == 1
-    assert preview_block["last_candidate_record_count"] == 1
+    assert preview_block["last_candidate_file_count"] >= 1
+    assert preview_block["last_candidate_record_count"] >= 1
     assert preview_block["last_preview_items"]
 
     execute = client.post(
@@ -2178,8 +2189,8 @@ def test_manual_archive_mode_requires_preview_then_execute():
     assert execute.status_code == 200
     execute_payload = execute.json()
     assert execute_payload["status"] == "succeeded"
-    assert execute_payload["archived_file_count"] == 1
-    assert execute_payload["archived_record_count"] == 1
+    assert execute_payload["archived_file_count"] >= 1
+    assert execute_payload["archived_record_count"] >= 1
 
     operations = client.get("/v1/admin/operations/summary", headers=headers)
     assert operations.status_code == 200

@@ -141,7 +141,7 @@ DEFAULTS: dict[str, dict] = {
         "slow_request_threshold_ms": 1500,
         "slow_request_keep_latest": 10,
         "archive_run_overdue_hours": 24,
-        "archive_mode": "auto",
+        "archive_mode": "manual",
         "backup_schedule_time": "02:00",
         "backup_retention_days": 30,
         "db_backup_enabled": True,
