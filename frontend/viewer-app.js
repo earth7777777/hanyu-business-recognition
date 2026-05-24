@@ -72,7 +72,7 @@ const state = {
     list: 0,
     customer: 0,
   },
-  returnContext: null,
+  returnStack: [],
 };
 
 function byId(id) {
@@ -1569,14 +1569,27 @@ function restoreContext(context) {
   state.currentScreen = context.screen || "overview";
   state.activeSection = context.section || state.activeSection;
   state.uninvoicedView = context.uninvoicedView || state.uninvoicedView;
-  state.currentCustomer = context.customer || state.currentCustomer;
+  state.currentCustomer = context.customer ?? "";
   state.dueSegment = context.dueSegment || state.dueSegment;
   state.alertState = context.alertState || state.alertState;
   renderApp();
   restoreScroll(context.scrollY || 0);
 }
 
+function pushReturnContext() {
+  state.returnStack.push(screenContext());
+}
+
+function restorePreviousContext() {
+  restoreContext(state.returnStack.pop() || null);
+}
+
+function clearReturnStack() {
+  state.returnStack = [];
+}
+
 function goOverview() {
+  clearReturnStack();
   saveCurrentScroll();
   state.currentScreen = "overview";
   renderApp();
@@ -1584,6 +1597,7 @@ function goOverview() {
 }
 
 function openQuick(section) {
+  clearReturnStack();
   saveCurrentScroll();
   state.activeSection = section;
   if (section === "uninvoiced") {
@@ -1596,12 +1610,14 @@ function openQuick(section) {
 }
 
 function closeQuick() {
+  clearReturnStack();
   state.currentScreen = "overview";
   renderApp();
   restoreScroll(state.scrollPositions.overview || 0);
 }
 
 async function openList(section) {
+  clearReturnStack();
   saveCurrentScroll();
   state.activeSection = section;
   if (section === "uninvoiced") {
@@ -1617,6 +1633,7 @@ async function openList(section) {
 }
 
 function closeList() {
+  clearReturnStack();
   state.currentScreen = "quick";
   renderApp();
   restoreScroll(state.scrollPositions.quick || 0);
@@ -1647,7 +1664,7 @@ function markAlertReadLocally(alertId) {
 }
 
 async function openDetail(alertId, { markRead = true } = {}) {
-  state.returnContext = screenContext();
+  pushReturnContext();
   state.selectedAlertId = alertId;
   state.detail = await request(`/viewer/alerts/${encodeURIComponent(alertId)}`);
   state.activeSection = state.detail.alert_type === "due_before_ship" ? "unshipped" : "uninvoiced";
@@ -1682,7 +1699,7 @@ async function openLeadUninvoicedDetail(customer) {
 }
 
 async function openCustomer(customer) {
-  state.returnContext = screenContext();
+  pushReturnContext();
   state.currentCustomer = customer;
   state.customerDetail = null;
   state.currentScreen = "customer";
@@ -1693,13 +1710,13 @@ async function openCustomer(customer) {
 }
 
 function closeCustomer() {
-  restoreContext(state.returnContext);
+  restorePreviousContext();
 }
 
 function closeDetail() {
   state.sourceVisible = false;
   state.source = null;
-  restoreContext(state.returnContext);
+  restorePreviousContext();
 }
 
 async function toggleSourcePanel() {
@@ -1736,14 +1753,14 @@ async function toggleAlertState() {
 }
 
 function openAiFromCurrentScreen() {
-  state.returnContext = screenContext();
+  pushReturnContext();
   state.currentScreen = "ai";
   renderApp();
   scrollToTop();
 }
 
 function closeAi() {
-  restoreContext(state.returnContext);
+  restorePreviousContext();
 }
 
 async function refreshApp({ preserveDetail = true } = {}) {
