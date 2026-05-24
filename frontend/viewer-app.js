@@ -1,5 +1,6 @@
 const SH_TZ = "Asia/Shanghai";
 const APP_PATH = "/app/";
+const VIEWER_DEVICE_ID_KEY = "hanyu_viewer_device_id";
 const INSTALLABLE_PROTOCOLS = new Set(["https:", "http:"]);
 const TIME_BUCKETS = [
   { id: "all", label: "不限" },
@@ -122,6 +123,34 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function viewerDeviceId() {
+  try {
+    const existing = window.localStorage?.getItem(VIEWER_DEVICE_ID_KEY);
+    if (existing) return existing;
+    const generated =
+      window.crypto && typeof window.crypto.randomUUID === "function"
+        ? window.crypto.randomUUID()
+        : `device-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    window.localStorage?.setItem(VIEWER_DEVICE_ID_KEY, generated);
+    return generated;
+  } catch (_) {
+    return `device-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+}
+
+function viewerDeviceInfo() {
+  const width = window.screen?.width || "";
+  const height = window.screen?.height || "";
+  return {
+    device_id: viewerDeviceId(),
+    user_agent: navigator.userAgent || "",
+    platform: navigator.platform || "",
+    language: navigator.language || "",
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+    screen: width && height ? `${width}x${height}` : "",
+  };
 }
 
 function showMessage(id, text, tone = "error") {
@@ -1838,7 +1867,7 @@ async function bootLoginPage() {
       try {
         await request("/viewer/auth/login", {
           method: "POST",
-          body: JSON.stringify({ phone, password }),
+          body: JSON.stringify({ phone, password, device: viewerDeviceInfo() }),
         });
         window.location.replace(appHref());
       } catch (error) {

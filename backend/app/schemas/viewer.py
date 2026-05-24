@@ -6,9 +6,19 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
+class ViewerLoginDeviceInfo(BaseModel):
+    device_id: str | None = None
+    user_agent: str | None = None
+    platform: str | None = None
+    language: str | None = None
+    timezone: str | None = None
+    screen: str | None = None
+
+
 class ViewerLoginBody(BaseModel):
     phone: str
     password: str
+    device: ViewerLoginDeviceInfo | None = None
 
 
 class ViewerAccountCreateBody(BaseModel):
@@ -29,6 +39,28 @@ class ViewerAccountResetPasswordBody(BaseModel):
     password: str
 
 
+class ViewerDevicePatchBody(BaseModel):
+    device_remark: str | None = None
+
+
+class ViewerDeviceItem(BaseModel):
+    id: str
+    device_key: str
+    device_name: str
+    device_remark: str
+    device_type: str
+    browser_name: str
+    platform: str
+    ip_address: str
+    language: str
+    timezone_name: str
+    screen_size: str
+    first_seen_at: datetime
+    last_seen_at: datetime
+    last_login_at: datetime
+    login_count: int
+
+
 class ViewerReminderSettingChangeBody(BaseModel):
     customer: str
     alert_type: str
@@ -46,6 +78,7 @@ class ViewerAccountItem(BaseModel):
     created_at: datetime
     updated_at: datetime
     last_login_at: datetime | None = None
+    devices: list[ViewerDeviceItem] = Field(default_factory=list)
 
 
 class ViewerProfile(BaseModel):

@@ -15,6 +15,7 @@ from app.db.models import (
     ViewerAccount,
     ViewerCustomerAlertSetting,
     ViewerCustomerAlertSettingLog,
+    ViewerDevice,
 )
 from app.schemas.viewer import (
     AdminCustomerOverviewAlertItem,
@@ -24,12 +25,15 @@ from app.schemas.viewer import (
     ViewerAccountItem,
     ViewerAccountPatchBody,
     ViewerAccountResetPasswordBody,
+    ViewerDeviceItem,
+    ViewerDevicePatchBody,
     ViewerReminderSettingChangeBody,
     ViewerReminderSettingItem,
     ViewerReminderSettingLogItem,
     ViewerReminderSettingsPayload,
 )
 from app.services.viewer_auth import (
+    _viewer_device_public,
     alert_last_changed_at,
     ensure_viewer_role,
     hash_password,
@@ -512,6 +516,32 @@ def patch_viewer_account(
     db.commit()
     db.refresh(account)
     return ViewerAccountItem(**viewer_public(account))
+
+
+@router.patch("/viewer-accounts/{account_id}/devices/{device_id}", response_model=ViewerDeviceItem)
+def patch_viewer_device(
+    account_id: str,
+    device_id: str,
+    body: ViewerDevicePatchBody,
+    db: Session = Depends(db_dep),
+    role: str = Depends(_ensure_admin),
+):
+    _ = role
+    account = db.get(ViewerAccount, account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="账号不存在。")
+    device = (
+        db.query(ViewerDevice)
+        .filter(ViewerDevice.id == device_id, ViewerDevice.account_id == account.id)
+        .first()
+    )
+    if not device:
+        raise HTTPException(status_code=404, detail="设备记录不存在。")
+
+    device.device_remark = str(body.device_remark or "").strip()[:120]
+    db.commit()
+    db.refresh(device)
+    return ViewerDeviceItem(**_viewer_device_public(device))
 
 
 @router.post("/viewer-accounts/{account_id}/reset-password")

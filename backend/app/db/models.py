@@ -183,6 +183,7 @@ class ViewerAccount(Base):
 
     sessions: Mapped[list[ViewerSession]] = relationship(back_populates="account", cascade="all,delete-orphan")
     reads: Mapped[list[ViewerAlertRead]] = relationship(back_populates="account", cascade="all,delete-orphan")
+    devices: Mapped[list["ViewerDevice"]] = relationship(back_populates="account", cascade="all,delete-orphan")
 
 
 class ViewerSession(Base):
@@ -198,6 +199,31 @@ class ViewerSession(Base):
     revoked_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     account: Mapped[ViewerAccount] = relationship(back_populates="sessions")
+
+
+class ViewerDevice(Base):
+    __tablename__ = "viewer_devices"
+    __table_args__ = (UniqueConstraint("account_id", "device_key", name="uq_viewer_device_per_account"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    account_id: Mapped[str] = mapped_column(ForeignKey("viewer_accounts.id", ondelete="CASCADE"), index=True)
+    device_key: Mapped[str] = mapped_column(String(96), index=True)
+    device_name: Mapped[str] = mapped_column(String(120), default="")
+    device_remark: Mapped[str] = mapped_column(String(120), default="")
+    device_type: Mapped[str] = mapped_column(String(60), default="")
+    browser_name: Mapped[str] = mapped_column(String(80), default="")
+    platform: Mapped[str] = mapped_column(String(120), default="")
+    user_agent: Mapped[str] = mapped_column(Text, default="")
+    ip_address: Mapped[str] = mapped_column(String(80), default="")
+    language: Mapped[str] = mapped_column(String(40), default="")
+    timezone_name: Mapped[str] = mapped_column(String(80), default="")
+    screen_size: Mapped[str] = mapped_column(String(40), default="")
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)
+    last_login_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)
+    login_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    account: Mapped[ViewerAccount] = relationship(back_populates="devices")
 
 
 class ViewerAlertRead(Base):

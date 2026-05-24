@@ -561,7 +561,7 @@ def _related_uninvoiced_order_key(entry: dict) -> str:
 @router.post("/auth/login")
 def viewer_login(body: ViewerLoginBody, request: Request, response: Response, db: Session = Depends(db_dep)):
     account = authenticate_viewer(db, phone=body.phone, password=body.password)
-    token = issue_viewer_session(db, account)
+    token = issue_viewer_session(db, account, device_info=body.device, request=request)
     response.set_cookie(
         key=VIEWER_SESSION_COOKIE,
         value=token,

@@ -3693,6 +3693,49 @@ function renderCustomerOverviewHint(text) {
   }
 }
 
+function shortDeviceKey(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  return text.length > 10 ? `...${text.slice(-8)}` : text;
+}
+
+function renderViewerDeviceSummary(devices) {
+  const items = Array.isArray(devices) ? devices : [];
+  if (!items.length) return '<span class="hint">未记录设备</span>';
+  return `
+    <div class="viewer-device-list">
+      ${items
+        .slice(0, 3)
+        .map((device) => {
+          const autoTitle = device.device_name || [device.device_type, device.browser_name].filter(Boolean).join(" / ") || "未知设备";
+          const remark = String(device.device_remark || "").trim();
+          const title = remark || autoTitle;
+          const meta = [
+            remark && autoTitle ? `自动识别 ${autoTitle}` : "",
+            device.ip_address ? `IP ${device.ip_address}` : "",
+            device.screen_size ? `屏幕 ${device.screen_size}` : "",
+            device.timezone_name || "",
+            device.device_key ? `编号 ${shortDeviceKey(device.device_key)}` : "",
+          ]
+            .filter(Boolean)
+            .join(" / ");
+          return `
+            <div class="viewer-device-item" data-device-id="${escapeHtml(device.id || "")}">
+              <strong>${escapeHtml(title)}</strong>
+              <span>${escapeHtml(device.last_login_at ? fmtTime(device.last_login_at) : "未登录")}</span>
+              ${meta ? `<span>${escapeHtml(meta)}</span>` : ""}
+              <div class="viewer-device-remark-row">
+                <input data-field="device_remark" value="${escapeHtml(remark)}" placeholder="备注：老板娘手机" />
+                <button data-action="save-device-remark" type="button">保存备注</button>
+              </div>
+            </div>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
 function renderViewerAccounts(items) {
   const root = el("viewerAccountsList");
   if (!root) return;
@@ -3711,6 +3754,7 @@ function renderViewerAccounts(items) {
             <th>角色</th>
             <th>启用状态</th>
             <th>最近登录</th>
+            <th>最近设备</th>
             <th>动作</th>
           </tr>
         </thead>
@@ -3734,6 +3778,7 @@ function renderViewerAccounts(items) {
                     </label>
                   </td>
                   <td class="viewer-account-last-login">${item.last_login_at ? escapeHtml(fmtTime(item.last_login_at)) : "未登录"}</td>
+                  <td>${renderViewerDeviceSummary(item.devices)}</td>
                   <td>
                     <div class="viewer-account-actions">
                       <button data-action="save-account">保存</button>
@@ -4247,6 +4292,31 @@ async function resetViewerAccountPassword(button) {
   alert("密码已重置，旧登录会自动失效。");
 }
 
+function readViewerDeviceRemark(button) {
+  const row = button?.closest?.("tr[data-account-id]");
+  const deviceItem = button?.closest?.(".viewer-device-item[data-device-id]");
+  if (!row || !deviceItem) return null;
+  return {
+    accountId: row.dataset.accountId || "",
+    deviceId: deviceItem.dataset.deviceId || "",
+    deviceRemark: deviceItem.querySelector('[data-field="device_remark"]')?.value?.trim() || "",
+  };
+}
+
+async function saveViewerDeviceRemark(button) {
+  const row = readViewerDeviceRemark(button);
+  if (!row || !row.accountId || !row.deviceId) return;
+  await api(
+    `/admin/viewer-accounts/${encodeURIComponent(row.accountId)}/devices/${encodeURIComponent(row.deviceId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ device_remark: row.deviceRemark }),
+    }
+  );
+  await refreshViewerAccounts();
+  alert(row.deviceRemark ? "设备备注已保存。" : "设备备注已清空。");
+}
+
 async function saveViewerReminderSetting(button) {
   if (getRole() !== "admin") {
     alert("仅管理员可改客户提醒开关。");
@@ -4289,6 +4359,9 @@ function bindViewerAccountInteractions() {
     }
     if (action === "reset-password") {
       resetViewerAccountPassword(button).catch((e) => alert(e.message));
+    }
+    if (action === "save-device-remark") {
+      saveViewerDeviceRemark(button).catch((e) => alert(e.message));
     }
   });
 }

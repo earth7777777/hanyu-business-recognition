@@ -302,6 +302,7 @@ _ORDER_MAPPING_REQUIRED_ALIAS_ORDER_FIELDS = {"amount", "order_total_amount"}
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _ensure_lifecycle_columns()
+    _ensure_viewer_device_columns()
     with SessionLocal() as db:
         for key, value in DEFAULTS.items():
             item = db.get(ConfigEntry, key)
@@ -573,6 +574,24 @@ def _ensure_lifecycle_columns() -> None:
             conn.execute(text("CREATE INDEX ix_normalized_records_is_current_effective ON normalized_records (is_current_effective)"))
         if create_record_delete_origin_index:
             conn.execute(text("CREATE INDEX ix_normalized_records_delete_origin ON normalized_records (delete_origin)"))
+
+
+def _ensure_viewer_device_columns() -> None:
+    inspector = inspect(engine)
+    try:
+        table_names = set(inspector.get_table_names())
+    except Exception:
+        return
+    if "viewer_devices" not in table_names:
+        return
+    try:
+        device_cols = {c["name"] for c in inspector.get_columns("viewer_devices")}
+    except Exception:
+        return
+    if "device_remark" in device_cols:
+        return
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE viewer_devices ADD COLUMN device_remark VARCHAR(120) NOT NULL DEFAULT ''"))
 
 
 def _backfill_lifecycle_defaults(db: Session) -> None:

@@ -11,7 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.api.deps import db_dep
-from app.db.models import Alert, ViewerAccount, ViewerAlertRead, ViewerSession
+from app.db.models import Alert, ViewerAccount, ViewerAlertRead, ViewerDevice, ViewerSession
 
 
 VIEWER_SESSION_COOKIE = "hanyu_viewer_session"
@@ -77,7 +77,149 @@ def _token_hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+def _clean_device_text(value: object, *, limit: int = 120) -> str:
+    return str(value or "").strip()[:limit]
+
+
+def _device_info_dict(value: object | None) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return dict(value)
+    if hasattr(value, "model_dump"):
+        return value.model_dump()  # type: ignore[no-any-return]
+    if hasattr(value, "dict"):
+        return value.dict()  # type: ignore[no-any-return]
+    return {}
+
+
+def _client_ip_from_request(request: object | None) -> str:
+    if request is None:
+        return ""
+    headers = getattr(request, "headers", {}) or {}
+    forwarded = _clean_device_text(headers.get("x-forwarded-for") if hasattr(headers, "get") else "", limit=200)
+    if forwarded:
+        return forwarded.split(",", 1)[0].strip()[:80]
+    real_ip = _clean_device_text(headers.get("x-real-ip") if hasattr(headers, "get") else "", limit=80)
+    if real_ip:
+        return real_ip
+    client = getattr(request, "client", None)
+    return _clean_device_text(getattr(client, "host", "") if client else "", limit=80)
+
+
+def _request_user_agent(request: object | None) -> str:
+    if request is None:
+        return ""
+    headers = getattr(request, "headers", {}) or {}
+    return _clean_device_text(headers.get("user-agent") if hasattr(headers, "get") else "", limit=1000)
+
+
+def _normalize_device_key(raw: object) -> str:
+    text = _clean_device_text(raw, limit=96)
+    cleaned = "".join(ch for ch in text if ch.isalnum() or ch in {"-", "_", "."})
+    if cleaned:
+        return cleaned[:96]
+    return f"server-{secrets.token_hex(8)}"
+
+
+def _infer_device_type(user_agent: str, platform: str) -> str:
+    text = f"{user_agent} {platform}".lower()
+    if "iphone" in text:
+        return "iPhone"
+    if "ipad" in text:
+        return "iPad"
+    if "android" in text:
+        return "Android"
+    if "windows" in text:
+        return "Windows"
+    if "macintosh" in text or "mac os" in text or "macintel" in text:
+        return "Mac"
+    return "未知设备"
+
+
+def _infer_browser_name(user_agent: str) -> str:
+    text = user_agent.lower()
+    if "micromessenger" in text:
+        return "微信内置浏览器"
+    if "edg/" in text or "edge/" in text:
+        return "Edge"
+    if "crios/" in text or ("chrome/" in text and "safari/" in text):
+        return "Chrome"
+    if "firefox/" in text:
+        return "Firefox"
+    if "safari/" in text:
+        return "Safari"
+    return "未知浏览器"
+
+
+def _viewer_device_public(device: ViewerDevice) -> dict[str, Any]:
+    return {
+        "id": device.id,
+        "device_key": device.device_key,
+        "device_name": device.device_name,
+        "device_remark": device.device_remark or "",
+        "device_type": device.device_type,
+        "browser_name": device.browser_name,
+        "platform": device.platform,
+        "ip_address": device.ip_address,
+        "language": device.language,
+        "timezone_name": device.timezone_name,
+        "screen_size": device.screen_size,
+        "first_seen_at": device.first_seen_at,
+        "last_seen_at": device.last_seen_at,
+        "last_login_at": device.last_login_at,
+        "login_count": int(device.login_count or 0),
+    }
+
+
+def record_viewer_device_login(
+    db: Session,
+    account: ViewerAccount,
+    *,
+    device_info: object | None = None,
+    request: object | None = None,
+    now: datetime | None = None,
+) -> ViewerDevice:
+    now = now or _utcnow()
+    info = _device_info_dict(device_info)
+    user_agent = _clean_device_text(info.get("user_agent"), limit=1000) or _request_user_agent(request)
+    platform = _clean_device_text(info.get("platform"), limit=120)
+    device_key = _normalize_device_key(info.get("device_id"))
+    device = (
+        db.query(ViewerDevice)
+        .filter(ViewerDevice.account_id == account.id, ViewerDevice.device_key == device_key)
+        .first()
+    )
+    if not device:
+        device = ViewerDevice(
+            account_id=account.id,
+            device_key=device_key,
+            first_seen_at=now,
+            login_count=0,
+        )
+        db.add(device)
+
+    device.user_agent = user_agent
+    device.platform = platform
+    device.device_type = _infer_device_type(user_agent, platform)
+    device.browser_name = _infer_browser_name(user_agent)
+    device.device_name = " / ".join(part for part in (device.device_type, device.browser_name) if part) or "未知设备"
+    device.ip_address = _client_ip_from_request(request)
+    device.language = _clean_device_text(info.get("language"), limit=40)
+    device.timezone_name = _clean_device_text(info.get("timezone"), limit=80)
+    device.screen_size = _clean_device_text(info.get("screen"), limit=40)
+    device.last_seen_at = now
+    device.last_login_at = now
+    device.login_count = int(device.login_count or 0) + 1
+    return device
+
+
 def viewer_public(account: ViewerAccount) -> dict[str, Any]:
+    devices = sorted(
+        list(getattr(account, "devices", []) or []),
+        key=lambda item: item.last_login_at or item.last_seen_at or item.first_seen_at,
+        reverse=True,
+    )
     return {
         "id": account.id,
         "phone": account.phone,
@@ -87,10 +229,17 @@ def viewer_public(account: ViewerAccount) -> dict[str, Any]:
         "created_at": account.created_at,
         "updated_at": account.updated_at,
         "last_login_at": account.last_login_at,
+        "devices": [_viewer_device_public(device) for device in devices[:5]],
     }
 
 
-def issue_viewer_session(db: Session, account: ViewerAccount) -> str:
+def issue_viewer_session(
+    db: Session,
+    account: ViewerAccount,
+    *,
+    device_info: object | None = None,
+    request: object | None = None,
+) -> str:
     now = _utcnow()
     active_sessions = (
         db.query(ViewerSession)
@@ -106,6 +255,7 @@ def issue_viewer_session(db: Session, account: ViewerAccount) -> str:
         item.revoked_reason = "replaced_by_new_login"
 
     token = secrets.token_urlsafe(32)
+    record_viewer_device_login(db, account, device_info=device_info, request=request, now=now)
     db.add(
         ViewerSession(
             account_id=account.id,

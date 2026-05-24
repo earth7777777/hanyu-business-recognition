@@ -165,7 +165,7 @@ td, th {
 }
 
 .viewer-account-table {
-  min-width: 920px;
+  min-width: 1220px;
 }
 
 .viewer-account-table input,
@@ -193,6 +193,42 @@ td, th {
 
 .viewer-account-empty {
   padding: 12px 0 4px;
+}
+
+.viewer-device-list {
+  display: grid;
+  gap: 6px;
+  min-width: 220px;
+}
+
+.viewer-device-item {
+  display: grid;
+  gap: 2px;
+  line-height: 1.35;
+}
+
+.viewer-device-item span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.viewer-device-remark-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) auto;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.viewer-device-remark-row input {
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.viewer-device-remark-row button {
+  padding: 6px 8px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .viewer-setting-toolbar {

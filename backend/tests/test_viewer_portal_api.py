@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import OperationalError
 
-from app.db.models import Alert, ViewerAccount, ViewerSession
+from app.db.models import Alert, ViewerAccount, ViewerDevice, ViewerSession
 from app.db.session import SessionLocal
 from app.main import app
 from app.services.viewer_auth import _resolve_account_by_token, hash_password, issue_viewer_session
@@ -321,6 +321,82 @@ def test_viewer_account_reset_and_disable():
         json={"phone": phone, "password": "viewer-pass-3"},
     )
     assert disabled_login.status_code == 403
+
+
+def test_viewer_login_records_device_for_admin_review():
+    headers = {"X-Role": "admin"}
+    phone = _unique_phone(20)
+    create_account = client.post(
+        "/v1/admin/viewer-accounts",
+        headers=headers,
+        json={
+            "phone": phone,
+            "display_name": "老板娘",
+            "role": "viewer_boss",
+            "password": "viewer-pass-device",
+        },
+    )
+    assert create_account.status_code == 200
+    account_id = create_account.json()["id"]
+
+    login_payload = {
+        "phone": phone,
+        "password": "viewer-pass-device",
+        "device": {
+            "device_id": "boss-phone-device-001",
+            "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Version/17.0 Mobile Safari/604.1",
+            "platform": "iPhone",
+            "language": "zh-CN",
+            "timezone": "Asia/Shanghai",
+            "screen": "390x844",
+        },
+    }
+    first_login = client.post("/v1/viewer/auth/login", json=login_payload, headers={"X-Forwarded-For": "1.2.3.4"})
+    assert first_login.status_code == 200
+    second_login = client.post("/v1/viewer/auth/login", json=login_payload, headers={"X-Forwarded-For": "1.2.3.4"})
+    assert second_login.status_code == 200
+
+    with SessionLocal() as db:
+        devices = db.query(ViewerDevice).filter(ViewerDevice.account_id == account_id).all()
+        assert len(devices) == 1
+        device = devices[0]
+        assert device.device_key == "boss-phone-device-001"
+        assert device.device_type == "iPhone"
+        assert device.browser_name == "Safari"
+        assert device.ip_address == "1.2.3.4"
+        assert device.login_count == 2
+        assert device.device_remark == ""
+
+    account_list = client.get("/v1/admin/viewer-accounts", headers=headers)
+    assert account_list.status_code == 200
+    account = next(item for item in account_list.json() if item["id"] == account_id)
+    assert len(account["devices"]) == 1
+    device_id = account["devices"][0]["id"]
+    assert account["devices"][0]["device_name"] == "iPhone / Safari"
+    assert account["devices"][0]["device_remark"] == ""
+    assert account["devices"][0]["screen_size"] == "390x844"
+
+    rename_device = client.patch(
+        f"/v1/admin/viewer-accounts/{account_id}/devices/{device_id}",
+        headers=headers,
+        json={"device_remark": "老板娘手机"},
+    )
+    assert rename_device.status_code == 200
+    assert rename_device.json()["device_remark"] == "老板娘手机"
+
+    third_login = client.post("/v1/viewer/auth/login", json=login_payload, headers={"X-Forwarded-For": "1.2.3.4"})
+    assert third_login.status_code == 200
+
+    with SessionLocal() as db:
+        device = db.query(ViewerDevice).filter(ViewerDevice.id == device_id).one()
+        assert device.login_count == 3
+        assert device.device_name == "iPhone / Safari"
+        assert device.device_remark == "老板娘手机"
+
+    account_list = client.get("/v1/admin/viewer-accounts", headers=headers)
+    assert account_list.status_code == 200
+    account = next(item for item in account_list.json() if item["id"] == account_id)
+    assert account["devices"][0]["device_remark"] == "老板娘手机"
 
 
 def test_viewer_session_last_seen_recent_request_does_not_write():
