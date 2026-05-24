@@ -7,6 +7,7 @@ const LEGACY_LOCAL_BACKEND_BASES = new Set([
 ]);
 const DISPLAY_TIME_ZONE = "Asia/Shanghai";
 let latestArchivePreviewToken = "";
+let latestArchivePreviewSummary = null;
 const TIME_FIELD_KEYS = new Set([
   "created_at",
   "updated_at",
@@ -1042,6 +1043,11 @@ function renderOperationsMessage(message, level = "info") {
   if (!root) return;
   const color = level === "error" ? "#b91c1c" : "#5f7282";
   root.innerHTML = `<p class="hint" style="color:${color};">${escapeHtml(message)}</p>`;
+}
+
+function showOperationsNotice(message, level = "info") {
+  renderOperationsMessage(message, level);
+  alert(message);
 }
 
 function formatOpsTime(value) {
@@ -3350,56 +3356,109 @@ async function runRestoreDrill() {
 
 async function setArchiveMode(mode) {
   if (getRole() !== "admin") {
-    renderOperationsMessage("仅管理员可用：请先将上方角色切换为管理员。");
+    showOperationsNotice("仅管理员可用：请先将上方角色切换为管理员。", "error");
     return;
   }
   const normalizedMode = String(mode || "").trim().toLowerCase() === "manual" ? "manual" : "auto";
-  const current = await api("/config/operations_monitoring_policy");
-  const nextValue = {
-    ...(current.value || {}),
-    archive_mode: normalizedMode,
-  };
-  latestArchivePreviewToken = "";
-  await api("/config/operations_monitoring_policy", {
-    method: "PUT",
-    body: JSON.stringify({ value: nextValue }),
-  });
-  await refreshOperationsSummary();
-  alert(
+  const confirmMessage =
     normalizedMode === "manual"
-      ? "已切到手动挡，后续请先查看手动归档候选，再执行手动归档。"
-      : "已切到自动挡，后续新命中候选会自动归档。"
-  );
+      ? "确认切到手动挡吗？切换后系统不会自动归档；后续需要先查看手动归档候选，再执行手动归档。"
+      : "确认切到自动挡吗？切换后，后续新命中“已发货已开票”条件的数据会自动归档。";
+  if (!confirm(confirmMessage)) {
+    renderOperationsMessage("已取消切换归档模式。");
+    return;
+  }
+  try {
+    const current = await api("/config/operations_monitoring_policy");
+    const nextValue = {
+      ...(current.value || {}),
+      archive_mode: normalizedMode,
+    };
+    latestArchivePreviewToken = "";
+    latestArchivePreviewSummary = null;
+    await api("/config/operations_monitoring_policy", {
+      method: "PUT",
+      body: JSON.stringify({ value: nextValue }),
+    });
+    await refreshOperationsSummary();
+    showOperationsNotice(
+      normalizedMode === "manual"
+        ? "已切到手动挡，后续请先查看手动归档候选，再执行手动归档。"
+        : "已切到自动挡，后续新命中候选会自动归档。"
+    );
+  } catch (err) {
+    const text = err && err.message ? err.message : String(err);
+    showOperationsNotice(`归档模式切换失败：${text}`, "error");
+  }
 }
 
 async function runArchivePreview() {
   if (getRole() !== "admin") {
-    renderOperationsMessage("仅管理员可用：请先将上方角色切换为管理员。");
+    showOperationsNotice("仅管理员可用：请先将上方角色切换为管理员。", "error");
     return;
   }
-  const payload = await api("/admin/operations/archive/preview", {
-    method: "POST",
-    body: JSON.stringify({}),
-  });
-  latestArchivePreviewToken = String(payload.preview_token || "").trim();
-  await refreshOperationsSummary();
+  renderOperationsMessage("正在检查手动归档候选，请稍等...");
+  try {
+    const payload = await api("/admin/operations/archive/preview", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    latestArchivePreviewToken = String(payload.preview_token || "").trim();
+    latestArchivePreviewSummary = {
+      fileCount: Number(payload.candidate_file_count || 0),
+      recordCount: Number(payload.candidate_record_count || 0),
+    };
+    await refreshOperationsSummary();
+    const message =
+      latestArchivePreviewSummary.recordCount > 0
+        ? `已完成候选检查：可归档记录 ${latestArchivePreviewSummary.recordCount} 条，涉及文件 ${latestArchivePreviewSummary.fileCount} 个。请确认后再点“执行手动归档”。`
+        : "已完成候选检查：当前没有符合“已发货已开票”的归档候选。";
+    showOperationsNotice(message);
+  } catch (err) {
+    latestArchivePreviewToken = "";
+    latestArchivePreviewSummary = null;
+    const text = err && err.message ? err.message : String(err);
+    showOperationsNotice(`手动归档候选检查失败：${text}`, "error");
+  }
 }
 
 async function runArchiveExecute() {
   if (getRole() !== "admin") {
-    renderOperationsMessage("仅管理员可用：请先将上方角色切换为管理员。");
+    showOperationsNotice("仅管理员可用：请先将上方角色切换为管理员。", "error");
     return;
   }
   if (!latestArchivePreviewToken) {
-    renderOperationsMessage("执行手动归档前，请先点一次“查看手动归档候选”。", "error");
+    showOperationsNotice("执行手动归档前，请先点一次“查看手动归档候选”。", "error");
     return;
   }
-  await api("/admin/operations/archive/run", {
-    method: "POST",
-    body: JSON.stringify({ preview_token: latestArchivePreviewToken }),
-  });
-  latestArchivePreviewToken = "";
-  await refreshOperationsSummary();
+  const recordCount = Number(latestArchivePreviewSummary?.recordCount || 0);
+  const fileCount = Number(latestArchivePreviewSummary?.fileCount || 0);
+  const confirmMessage =
+    recordCount > 0
+      ? `本次将归档 ${recordCount} 条已发货已开票记录，涉及文件 ${fileCount} 个。归档后不会参与扫描，但可以在“已归档”里查询。确认执行吗？`
+      : "当前试运行结果显示没有可归档记录。仍要提交执行请求吗？";
+  if (!confirm(confirmMessage)) {
+    renderOperationsMessage("已取消执行手动归档。");
+    return;
+  }
+  renderOperationsMessage("手动归档执行中，请稍等...");
+  try {
+    const payload = await api("/admin/operations/archive/run", {
+      method: "POST",
+      body: JSON.stringify({ preview_token: latestArchivePreviewToken }),
+    });
+    latestArchivePreviewToken = "";
+    latestArchivePreviewSummary = null;
+    await refreshOperationsSummary();
+    showOperationsNotice(
+      `手动归档完成：已归档记录 ${payload.archived_record_count ?? 0} 条，涉及文件 ${payload.archived_file_count ?? 0} 个。`
+    );
+  } catch (err) {
+    latestArchivePreviewToken = "";
+    latestArchivePreviewSummary = null;
+    const text = err && err.message ? err.message : String(err);
+    showOperationsNotice(`手动归档执行失败：${text}`, "error");
+  }
 }
 
 async function download(kind) {
