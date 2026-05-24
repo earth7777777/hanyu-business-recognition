@@ -1,4 +1,4 @@
-const CACHE_NAME = "hanyu-viewer-shell-v32";
+const CACHE_NAME = "hanyu-viewer-shell-v33";
 const SHELL_ASSETS = [
   "/",
   "/index.html",

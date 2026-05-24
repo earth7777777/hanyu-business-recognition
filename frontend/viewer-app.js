@@ -1249,7 +1249,7 @@ function renderDetailScreen() {
       </section>
     `;
   }
-  const messageLong = String(detail.message_long || detail.payload?.message_long || "").trim();
+  const copyMessage = String(detail.message_long || detail.payload?.message_long || detail.message || "").trim();
   return `
     <section class="page-shell page-shell--detail">
       <header class="topbar topbar--detail">
@@ -1277,8 +1277,7 @@ function renderDetailScreen() {
       ${state.sourceVisible ? renderSourcePanel() : ""}
 
       <section class="detail-copy-panel">
-        <p>${escapeHtml(detail.message)}</p>
-        ${messageLong ? `<p>${escapeHtml(messageLong)}</p>` : ""}
+        <p>${escapeHtml(copyMessage)}</p>
       </section>
     </section>
   `;
