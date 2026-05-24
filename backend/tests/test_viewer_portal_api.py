@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import io
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import OperationalError
 
-from app.db.models import Alert
+from app.db.models import Alert, ViewerAccount, ViewerSession
 from app.db.session import SessionLocal
 from app.main import app
+from app.services.viewer_auth import _resolve_account_by_token, hash_password, issue_viewer_session
 
 
 client = TestClient(app)
@@ -319,6 +321,80 @@ def test_viewer_account_reset_and_disable():
         json={"phone": phone, "password": "viewer-pass-3"},
     )
     assert disabled_login.status_code == 403
+
+
+def test_viewer_session_last_seen_recent_request_does_not_write():
+    phone = _unique_phone(21)
+    with SessionLocal() as db:
+        account = ViewerAccount(
+            phone=phone,
+            display_name="姚建锋",
+            role="viewer_yao",
+            password_hash=hash_password("viewer-pass-recent"),
+            is_active=True,
+        )
+        db.add(account)
+        db.commit()
+        db.refresh(account)
+        token = issue_viewer_session(db, account)
+
+        original_commit = db.commit
+
+        def fail_if_commit_called():
+            raise AssertionError("recent viewer session should not update last_seen_at")
+
+        db.commit = fail_if_commit_called
+        try:
+            resolved = _resolve_account_by_token(db, token)
+            assert resolved.id == account.id
+        finally:
+            db.commit = original_commit
+
+
+def test_viewer_session_last_seen_write_conflict_does_not_block_request():
+    phone = _unique_phone(22)
+    with SessionLocal() as db:
+        account = ViewerAccount(
+            phone=phone,
+            display_name="姚建锋",
+            role="viewer_yao",
+            password_hash=hash_password("viewer-pass-conflict"),
+            is_active=True,
+        )
+        db.add(account)
+        db.commit()
+        db.refresh(account)
+        token = issue_viewer_session(db, account)
+
+        session = (
+            db.query(ViewerSession)
+            .filter(ViewerSession.account_id == account.id)
+            .order_by(ViewerSession.created_at.desc())
+            .first()
+        )
+        assert session is not None
+        session.last_seen_at = datetime.now(timezone.utc) - timedelta(days=1)
+        db.commit()
+
+        original_commit = db.commit
+        commit_calls = 0
+
+        def raise_write_conflict():
+            nonlocal commit_calls
+            commit_calls += 1
+            raise OperationalError(
+                "UPDATE viewer_sessions SET last_seen_at=:last_seen_at",
+                {},
+                Exception("Record has changed since last read in table 'viewer_sessions'"),
+            )
+
+        db.commit = raise_write_conflict
+        try:
+            resolved = _resolve_account_by_token(db, token)
+            assert resolved.id == account.id
+            assert commit_calls == 1
+        finally:
+            db.commit = original_commit
 
 
 def test_viewer_uninvoiced_customer_ranking_and_reminder_switch():

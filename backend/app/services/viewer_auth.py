@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import Cookie, Depends, HTTPException, status
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.api.deps import db_dep
@@ -15,6 +16,7 @@ from app.db.models import Alert, ViewerAccount, ViewerAlertRead, ViewerSession
 
 VIEWER_SESSION_COOKIE = "hanyu_viewer_session"
 VIEWER_SESSION_TTL_DAYS = 365
+VIEWER_SESSION_LAST_SEEN_TOUCH_INTERVAL = timedelta(minutes=5)
 PBKDF2_ROUNDS = 240_000
 VIEWER_ALLOWED_ROLES = {"viewer_yao", "viewer_boss"}
 
@@ -155,6 +157,17 @@ def authenticate_viewer(db: Session, *, phone: str, password: str) -> ViewerAcco
     return account
 
 
+def _touch_viewer_session(db: Session, session: ViewerSession, now: datetime) -> None:
+    last_seen_at = _aware_utc(session.last_seen_at)
+    if last_seen_at and now - last_seen_at < VIEWER_SESSION_LAST_SEEN_TOUCH_INTERVAL:
+        return
+    try:
+        session.last_seen_at = now
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+
+
 def _resolve_account_by_token(db: Session, token: str | None) -> ViewerAccount:
     key = str(token or "").strip()
     if not key:
@@ -178,8 +191,7 @@ def _resolve_account_by_token(db: Session, token: str | None) -> ViewerAccount:
             db.commit()
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="该账号已停用。")
 
-    session.last_seen_at = now
-    db.commit()
+    _touch_viewer_session(db, session, now)
     return account
 
 
